@@ -1,0 +1,1782 @@
+import { useState, useEffect, useRef, useCallback } from “react”;
+
+/* ═══════════════════════════════════════════════════════════
+AVRE TRADING ACADEMY — WITH ILLUSTRATIONS
+Animated SVG candlesticks, market charts, SMC diagrams
+═══════════════════════════════════════════════════════════ */
+
+// ── LIVE CANDLESTICK DATA GENERATOR
+function generateCandles(count = 40) {
+const candles = [];
+let price = 1.0850;
+for (let i = 0; i < count; i++) {
+const body = (Math.random() - 0.48) * 0.0030;
+const open = price;
+const close = price + body;
+const high = Math.max(open, close) + Math.random() * 0.0012;
+const low = Math.min(open, close) - Math.random() * 0.0012;
+candles.push({ open, close, high, low, bull: close >= open });
+price = close;
+}
+return candles;
+}
+
+// ── COLORS
+const C = {
+ink: “#06060A”, ink2: “#0E0E14”, ink3: “#16161F”,
+line: “rgba(255,255,255,0.07)”, line2: “rgba(255,255,255,0.13)”,
+gold: “#E8E000”, em: “#00E5A0”, cr: “#FF2D55”,
+sky: “#4FC3F7”, purple: “#9B7FFF”, orange: “#FF8C42”,
+white: “#F5F5FA”, fog: “rgba(245,245,250,0.55)”, mist: “rgba(245,245,250,0.28)”
+};
+
+// ════════════════════════════════════════════════════════════
+//  SVG ILLUSTRATION COMPONENTS
+// ════════════════════════════════════════════════════════════
+
+// ── ANIMATED LIVE CHART (Dashboard hero)
+function LiveChart({ width = 580, height = 160 }) {
+const [candles, setCandles] = useState(() => generateCandles(35));
+const [tick, setTick] = useState(0);
+
+useEffect(() => {
+const id = setInterval(() => {
+setCandles(prev => {
+const last = prev[prev.length - 1];
+const body = (Math.random() - 0.48) * 0.0020;
+const open = last.close;
+const close = open + body;
+const high = Math.max(open, close) + Math.random() * 0.0008;
+const low = Math.min(open, close) - Math.random() * 0.0008;
+return […prev.slice(-34), { open, close, high, low, bull: close >= open }];
+});
+setTick(t => t + 1);
+}, 900);
+return () => clearInterval(id);
+}, []);
+
+const prices = candles.flatMap(c => [c.high, c.low]);
+const minP = Math.min(…prices), maxP = Math.max(…prices);
+const range = maxP - minP || 0.001;
+const pad = { l: 8, r: 8, t: 12, b: 12 };
+const cw = (width - pad.l - pad.r) / candles.length;
+const bw = Math.max(cw * 0.55, 3);
+const toY = p => pad.t + ((maxP - p) / range) * (height - pad.t - pad.b);
+
+// Line path for area fill
+const linePts = candles.map((c, i) => `${pad.l + i * cw + cw / 2},${toY(c.close)}`).join(” L “);
+const areaPath = `M ${linePts.replace("M ", "")} L ${pad.l + (candles.length - 1) * cw + cw / 2},${height - pad.b} L ${pad.l + cw / 2},${height - pad.b} Z`;
+
+return (
+<svg width={width} height={height} style={{ overflow: “visible” }}>
+<defs>
+<linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
+<stop offset="0%" stopColor={C.em} stopOpacity="0.15" />
+<stop offset="100%" stopColor={C.em} stopOpacity="0" />
+</linearGradient>
+<linearGradient id="lineGrad" x1="0" y1="0" x2="1" y2="0">
+<stop offset="0%" stopColor={C.em} stopOpacity="0.3" />
+<stop offset="100%" stopColor={C.em} stopOpacity="1" />
+</linearGradient>
+</defs>
+
+```
+  {/* Grid lines */}
+  {[0.25, 0.5, 0.75].map(t => (
+    <line key={t} x1={pad.l} y1={pad.t + t * (height - pad.t - pad.b)} x2={width - pad.r} y2={pad.t + t * (height - pad.t - pad.b)}
+      stroke={C.line} strokeWidth={1} strokeDasharray="3,6" />
+  ))}
+
+  {/* Area fill */}
+  <path d={areaPath} fill="url(#areaGrad)" />
+
+  {/* Candles */}
+  {candles.map((c, i) => {
+    const x = pad.l + i * cw;
+    const cx = x + cw / 2;
+    const isLast = i === candles.length - 1;
+    return (
+      <g key={`${i}-${tick}`}>
+        {/* Wick */}
+        <line x1={cx} y1={toY(c.high)} x2={cx} y2={toY(c.low)}
+          stroke={c.bull ? C.em : C.cr} strokeWidth={isLast ? 1.5 : 1} opacity={isLast ? 1 : 0.8} />
+        {/* Body */}
+        <rect
+          x={cx - bw / 2} y={toY(Math.max(c.open, c.close))}
+          width={bw} height={Math.max(Math.abs(toY(c.open) - toY(c.close)), 1.5)}
+          fill={c.bull ? C.em : C.cr}
+          opacity={isLast ? 1 : 0.75}
+          rx={0.5}
+        >
+          {isLast && <animate attributeName="opacity" values="0.6;1;0.6" dur="1.8s" repeatCount="indefinite" />}
+        </rect>
+      </g>
+    );
+  })}
+
+  {/* Price line */}
+  <polyline points={candles.map((c, i) => `${pad.l + i * cw + cw / 2},${toY(c.close)}`).join(" ")}
+    fill="none" stroke="url(#lineGrad)" strokeWidth={1.5} opacity={0.6} />
+
+  {/* Current price label */}
+  {(() => {
+    const last = candles[candles.length - 1];
+    const y = toY(last.close);
+    return (
+      <g>
+        <line x1={0} y1={y} x2={width} y2={y} stroke={C.em} strokeWidth={0.8} strokeDasharray="4,4" opacity={0.5} />
+        <rect x={width - 68} y={y - 9} width={68} height={18} rx={4} fill={C.em} />
+        <text x={width - 34} y={y + 4} textAnchor="middle" fill={C.ink} fontSize={9} fontFamily="'DM Mono',monospace" fontWeight="600">
+          {last.close.toFixed(4)}
+        </text>
+      </g>
+    );
+  })()}
+</svg>
+```
+
+);
+}
+
+// ── CANDLESTICK ANATOMY ILLUSTRATION
+function CandlestickAnatomy({ width = 320, height = 200 }) {
+return (
+<svg width={width} height={height} style={{ overflow: “visible” }}>
+<defs>
+<marker id="arrowG" markerWidth="8" markerHeight="6" refX="4" refY="3" orient="auto">
+<path d="M0,0 L8,3 L0,6 Z" fill={C.em} />
+</marker>
+<marker id="arrowR" markerWidth="8" markerHeight="6" refX="4" refY="3" orient="auto">
+<path d="M0,0 L8,3 L0,6 Z" fill={C.cr} />
+</marker>
+<marker id="arrowY" markerWidth="8" markerHeight="6" refX="4" refY="3" orient="auto">
+<path d="M0,0 L8,3 L0,6 Z" fill={C.gold} />
+</marker>
+</defs>
+
+```
+  {/* BULLISH CANDLE */}
+  <g transform="translate(40,10)">
+    {/* Wick */}
+    <line x1={20} y1={10} x2={20} y2={40} stroke={C.em} strokeWidth={2} />
+    {/* Body */}
+    <rect x={8} y={40} width={24} height={60} fill={C.em} rx={2} opacity={0.9} />
+    {/* Lower wick */}
+    <line x1={20} y1={100} x2={20} y2={130} stroke={C.em} strokeWidth={2} />
+
+    {/* Labels */}
+    <line x1={32} y1={10} x2={70} y2={10} stroke={C.em} strokeWidth={1} markerEnd="url(#arrowY)" opacity={0.6} />
+    <text x={74} y={14} fill={C.gold} fontSize={9} fontFamily="'DM Mono',monospace">HIGH</text>
+
+    <line x1={32} y1={40} x2={70} y2={38} stroke={C.em} strokeWidth={1} markerEnd="url(#arrowY)" opacity={0.6} />
+    <text x={74} y={42} fill={C.em} fontSize={9} fontFamily="'DM Mono',monospace">CLOSE</text>
+
+    <line x1={32} y1={100} x2={70} y2={98} stroke={C.em} strokeWidth={1} markerEnd="url(#arrowY)" opacity={0.6} />
+    <text x={74} y={102} fill={C.em} fontSize={9} fontFamily="'DM Mono',monospace">OPEN</text>
+
+    <line x1={32} y1={130} x2={70} y2={128} stroke={C.em} strokeWidth={1} markerEnd="url(#arrowY)" opacity={0.6} />
+    <text x={74} y={132} fill={C.gold} fontSize={9} fontFamily="'DM Mono',monospace">LOW</text>
+
+    {/* BULLISH label */}
+    <text x={20} y={75} textAnchor="middle" fill={C.ink} fontSize={8} fontFamily="'Syne',sans-serif" fontWeight="700">BULL</text>
+    <animate attributeName="opacity" values="0;1" dur="0.5s" fill="freeze" />
+  </g>
+
+  {/* BEARISH CANDLE */}
+  <g transform="translate(170,10)">
+    <line x1={20} y1={10} x2={20} y2={30} stroke={C.cr} strokeWidth={2} />
+    <rect x={8} y={30} width={24} height={70} fill={C.cr} rx={2} opacity={0.9} />
+    <line x1={20} y1={100} x2={20} y2={130} stroke={C.cr} strokeWidth={2} />
+
+    <text x={20} y={70} textAnchor="middle" fill={C.ink} fontSize={8} fontFamily="'Syne',sans-serif" fontWeight="700">BEAR</text>
+
+    <text x={-4} y={14} fill={C.gold} fontSize={9} fontFamily="'DM Mono',monospace" textAnchor="end">HIGH</text>
+    <text x={-4} y={34} fill={C.cr} fontSize={9} fontFamily="'DM Mono',monospace" textAnchor="end">OPEN</text>
+    <text x={-4} y={104} fill={C.cr} fontSize={9} fontFamily="'DM Mono',monospace" textAnchor="end">CLOSE</text>
+    <text x={-4} y={134} fill={C.gold} fontSize={9} fontFamily="'DM Mono',monospace" textAnchor="end">LOW</text>
+  </g>
+
+  {/* Title */}
+  <text x={160} y={155} textAnchor="middle" fill={C.mist} fontSize={9} fontFamily="'Syne',sans-serif" letterSpacing="2" textTransform="uppercase">ANATOMIE D'UN CHANDELIER</text>
+</svg>
+```
+
+);
+}
+
+// ── PATTERN ILLUSTRATIONS (Doji, Pin Bar, Engulfing)
+function CandlePatterns({ width = 420, height = 120 }) {
+const patterns = [
+{
+name: “DOJI”, color: C.gold, desc: “Indécision”,
+draw: (x) => (<g key="doji">
+<line x1={x + 20} y1={15} x2={x + 20} y2={90} stroke={C.gold} strokeWidth={2} />
+<rect x={x + 12} y={48} width={16} height={4} fill={C.gold} rx={1} />
+</g>)
+},
+{
+name: “PIN BAR”, color: C.em, desc: “Rejet fort”,
+draw: (x) => (<g key="pin">
+<line x1={x + 20} y1={10} x2={x + 20} y2={35} stroke={C.em} strokeWidth={2} />
+<rect x={x + 12} y={35} width={16} height={22} fill={C.em} rx={2} />
+<line x1={x + 20} y1={57} x2={x + 20} y2={68} stroke={C.em} strokeWidth={2} />
+</g>)
+},
+{
+name: “ENGULFING ↑”, color: C.em, desc: “Retournement”,
+draw: (x) => (<g key="eng">
+<rect x={x + 16} y={42} width={10} height={20} fill={C.cr} rx={1} opacity={0.9} />
+<rect x={x + 10} y={26} width={20} height={40} fill={C.em} rx={2} />
+</g>)
+},
+{
+name: “SHOOTING STAR”, color: C.cr, desc: “Rejet du haut”,
+draw: (x) => (<g key="ss">
+<line x1={x + 20} y1={10} x2={x + 20} y2={55} stroke={C.cr} strokeWidth={2} />
+<rect x={x + 12} y={55} width={16} height={22} fill={C.cr} rx={2} />
+<line x1={x + 20} y1={77} x2={x + 20} y2={85} stroke={C.cr} strokeWidth={2} />
+</g>)
+},
+];
+
+return (
+<svg width={width} height={height}>
+{patterns.map((p, i) => (
+<g key={i}>
+{p.draw(i * 105)}
+<rect x={i * 105} y={0} width={90} height={100} fill=“transparent” rx={8} stroke={p.color} strokeWidth={0.5} opacity={0.3} />
+<text x={i * 105 + 20} y={108} textAnchor=“middle” fill={p.color} fontSize={8} fontFamily=”‘DM Mono’,monospace” fontWeight=“600”>{p.name}</text>
+<text x={i * 105 + 20} y={118} textAnchor=“middle” fill={C.mist} fontSize={8} fontFamily=”‘DM Mono’,monospace”>{p.desc}</text>
+</g>
+))}
+</svg>
+);
+}
+
+// ── MARKET STRUCTURE ILLUSTRATION (HH/HL/LL/LH)
+function MarketStructure({ width = 500, height = 180, type = “uptrend” }) {
+const up = type === “uptrend”;
+
+// Uptrend points: series of HH + HL
+const uptrendPts = [
+{ x: 20, y: 140 }, { x: 70, y: 80 },   // HL → HH
+{ x: 120, y: 110 }, { x: 180, y: 50 },  // HL → HH
+{ x: 230, y: 80 }, { x: 290, y: 25 },   // HL → HH
+{ x: 340, y: 55 }, { x: 400, y: 15 },   // HL → HH (in progress)
+];
+const downtrendPts = [
+{ x: 20, y: 30 }, { x: 80, y: 100 },
+{ x: 120, y: 65 }, { x: 190, y: 130 },
+{ x: 230, y: 90 }, { x: 300, y: 155 },
+{ x: 340, y: 115 }, { x: 410, y: 168 },
+];
+const pts = up ? uptrendPts : downtrendPts;
+const color = up ? C.em : C.cr;
+const pathStr = pts.map((p, i) => `${i === 0 ? "M" : "L"}${p.x},${p.y}`).join(” “);
+
+const labels = up
+? [“HL”, “HH”, “HL”, “HH”, “HL”, “HH”, “HL”, “HH”]
+: [“LH”, “LL”, “LH”, “LL”, “LH”, “LL”, “LH”, “LL”];
+
+return (
+<svg width={width} height={height} style={{ overflow: “visible” }}>
+<defs>
+<linearGradient id={`mktGrad-${type}`} x1=“0” y1=“0” x2=“1” y2=“0”>
+<stop offset="0%" stopColor={color} stopOpacity="0.2" />
+<stop offset="100%" stopColor={color} stopOpacity="0.8" />
+</linearGradient>
+</defs>
+
+```
+  {/* Grid */}
+  {[40, 80, 120, 160].map(y => (
+    <line key={y} x1={0} y1={y} x2={width} y2={y} stroke={C.line} strokeWidth={1} />
+  ))}
+
+  {/* Path with animation */}
+  <path d={pathStr} fill="none" stroke={`url(#mktGrad-${type})`} strokeWidth={2.5}
+    strokeDasharray="600" strokeDashoffset="600" style={{ animation: "drawLine 2s ease forwards" }} />
+
+  {/* Points with labels */}
+  {pts.map((p, i) => (
+    <g key={i} style={{ animation: `fadeIn 0.3s ${i * 0.2}s ease forwards`, opacity: 0 }}>
+      <circle cx={p.x} cy={p.y} r={5} fill={color} />
+      <circle cx={p.x} cy={p.y} r={9} fill={color} opacity={0.2} />
+      <text x={p.x} y={up ? p.y - 14 : p.y + 18} textAnchor="middle"
+        fill={color} fontSize={9} fontFamily="'DM Mono',monospace" fontWeight="700">
+        {labels[i]}
+      </text>
+    </g>
+  ))}
+
+  {/* Title */}
+  <rect x={0} y={up ? 155 : 0} width={120} height={20} rx={4} fill={`${color}20`} />
+  <text x={60} y={up ? 165 : 14} textAnchor="middle" fill={color} fontSize={9}
+    fontFamily="'Syne',sans-serif" fontWeight="700" letterSpacing="1">
+    {up ? "UPTREND — BUY" : "DOWNTREND — SELL"}
+  </text>
+</svg>
+```
+
+);
+}
+
+// ── ORDER BLOCK ILLUSTRATION
+function OrderBlockDiagram({ width = 480, height = 200 }) {
+const [step, setStep] = useState(0);
+const steps = [“Impulsion forte”, “OB identifié”, “Retrace vers OB”, “Confirmation entrée”];
+
+useEffect(() => {
+const id = setInterval(() => setStep(s => (s + 1) % 4), 2200);
+return () => clearInterval(id);
+}, []);
+
+// Chart data for OB diagram
+const candles = [
+{ x: 20, o: 145, c: 140, h: 148, l: 136 },  // bearish (future OB)
+{ x: 50, o: 140, c: 100, h: 142, l: 95 },   // strong bearish impulse
+{ x: 80, o: 100, c: 88, h: 102, l: 85 },
+{ x: 110, o: 88, c: 92, h: 95, l: 85 },     // retrace start
+{ x: 140, o: 92, c: 138, h: 141, l: 90 },   // retrace into OB
+{ x: 170, o: 138, c: 110, h: 142, l: 108 }, // rejection
+{ x: 200, o: 110, c: 90, h: 112, l: 88 },
+];
+
+return (
+<svg width={width} height={height} style={{ overflow: “visible” }}>
+<defs>
+<linearGradient id="obGrad" x1="0" y1="0" x2="0" y2="1">
+<stop offset="0%" stopColor={C.cr} stopOpacity="0.25" />
+<stop offset="100%" stopColor={C.cr} stopOpacity="0.05" />
+</linearGradient>
+</defs>
+
+```
+  {/* Grid */}
+  {[50, 100, 150].map(y => <line key={y} x1={0} y1={y} x2={width} y2={y} stroke={C.line} strokeWidth={1} />)}
+
+  {/* OB Zone highlight */}
+  {step >= 1 && (
+    <g>
+      <rect x={8} y={136} width={44} height={12} fill="url(#obGrad)" rx={2}
+        stroke={C.cr} strokeWidth={1} strokeDasharray="3,2" />
+      <text x={55} y={145} fill={C.cr} fontSize={9} fontFamily="'DM Mono',monospace" fontWeight="700">ORDER BLOCK</text>
+    </g>
+  )}
+
+  {/* Candles */}
+  {candles.map((c, i) => {
+    const isBull = c.c >= c.o;
+    const col = i === 0 ? C.cr : isBull ? C.em : C.cr;
+    const isOB = i === 0;
+    return (
+      <g key={i} opacity={step >= 2 || i < 4 ? 1 : 0.3} style={{ transition: "opacity 0.5s" }}>
+        <line x1={c.x + 10} y1={c.h} x2={c.x + 10} y2={c.l} stroke={isOB ? C.cr : col} strokeWidth={1.5} />
+        <rect x={c.x + 4} y={Math.min(c.o, c.c)} width={12} height={Math.max(Math.abs(c.o - c.c), 2)}
+          fill={isOB && step >= 1 ? C.cr : col} opacity={isOB && step >= 1 ? 1 : 0.85} rx={1}
+          stroke={isOB && step >= 1 ? C.cr : "none"} strokeWidth={isOB ? 1 : 0} />
+      </g>
+    );
+  })}
+
+  {/* Retrace arrow */}
+  {step >= 2 && (
+    <g>
+      <path d="M 220,90 Q 250,60 270,140" fill="none" stroke={C.gold} strokeWidth={1.5}
+        strokeDasharray="5,3" markerEnd="url(#arrowYellow)" />
+      <text x={260} y={55} fill={C.gold} fontSize={9} fontFamily="'DM Mono',monospace">retrace</text>
+    </g>
+  )}
+
+  {/* Entry confirmation arrow */}
+  {step >= 3 && (
+    <g>
+      <line x1={180} y1={108} x2={180} y2={80} stroke={C.em} strokeWidth={2} markerEnd="url(#arrowGreen)" />
+      <rect x={185} y={95} width={60} height={16} rx={4} fill={`${C.em}20`} stroke={C.em} strokeWidth={1} />
+      <text x={215} y={106} textAnchor="middle" fill={C.em} fontSize={9} fontFamily="'DM Mono',monospace">ENTRÉE ↑</text>
+    </g>
+  )}
+
+  {/* Step indicators */}
+  <g transform="translate(0,185)">
+    {steps.map((s, i) => (
+      <g key={i} transform={`translate(${i * 120},0)`}>
+        <circle cx={6} cy={5} r={5} fill={i <= step ? C.gold : C.line} />
+        <text x={15} y={9} fill={i <= step ? C.gold : C.mist} fontSize={9}
+          fontFamily="'DM Mono',monospace">{s}</text>
+      </g>
+    ))}
+  </g>
+</svg>
+```
+
+);
+}
+
+// ── FVG ILLUSTRATION
+function FVGDiagram({ width = 360, height = 160 }) {
+return (
+<svg width={width} height={height} style={{ overflow: “visible” }}>
+<defs>
+<pattern id="fvgStripes" x="0" y="0" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+<line x1="0" y1="0" x2="0" y2="8" stroke={C.gold} strokeWidth="2" opacity="0.4" />
+</pattern>
+</defs>
+
+```
+  {/* Grid */}
+  {[40, 80, 120].map(y => <line key={y} x1={0} y1={y} x2={width} y2={y} stroke={C.line} strokeWidth={1} />)}
+
+  {/* 3 candles showing FVG */}
+  {/* Candle 1 */}
+  <line x1={60} y1={110} x2={60} y2={140} stroke={C.em} strokeWidth={2} />
+  <rect x={50} y={85} width={20} height={25} fill={C.em} rx={2} />
+  <line x1={60} y1={70} x2={60} y2={85} stroke={C.em} strokeWidth={2} />
+
+  {/* Candle 2 — impulse */}
+  <line x1={110} y1={20} x2={110} y2={125} stroke={C.em} strokeWidth={2} />
+  <rect x={100} y={20} width={20} height={80} fill={C.em} rx={2} opacity={0.9} />
+
+  {/* Candle 3 */}
+  <line x1={160} y1={8} x2={160} y2={50} stroke={C.em} strokeWidth={2} />
+  <rect x={150} y={8} width={20} height={35} fill={C.em} rx={2} />
+  <line x1={160} y1={43} x2={160} y2={55} stroke={C.em} strokeWidth={2} />
+
+  {/* FVG Zone */}
+  <rect x={80} y={20} width={70} height={65} fill="url(#fvgStripes)" opacity={0.8} rx={2} />
+  <rect x={80} y={20} width={70} height={65} fill={C.gold} opacity={0.06} rx={2}
+    stroke={C.gold} strokeWidth={1.5} strokeDasharray="4,3" />
+
+  {/* Labels */}
+  <text x={115} y={58} textAnchor="middle" fill={C.gold} fontSize={9}
+    fontFamily="'DM Mono',monospace" fontWeight="700">FVG</text>
+  <text x={115} y={70} textAnchor="middle" fill={C.gold} fontSize={8}
+    fontFamily="'DM Mono',monospace">ZONE</text>
+
+  {/* Arrows showing mèche 1 vs mèche 3 */}
+  <line x1={80} y1={85} x2={220} y2={85} stroke={C.cr} strokeWidth={1} strokeDasharray="3,3" opacity={0.6} />
+  <line x1={150} y1={20} x2={220} y2={20} stroke={C.cr} strokeWidth={1} strokeDasharray="3,3" opacity={0.6} />
+  <line x1={220} y1={20} x2={220} y2={85} stroke={C.cr} strokeWidth={1} markerEnd="url(#arrowRed)" />
+  <text x={228} y={55} fill={C.cr} fontSize={8} fontFamily="'DM Mono',monospace">gap</text>
+
+  {/* Price fills FVG arrow */}
+  <path d="M 200,100 Q 160,90 130,60" fill="none" stroke={C.sky} strokeWidth={1.5}
+    strokeDasharray="4,3" />
+  <text x={210} y={110} fill={C.sky} fontSize={8} fontFamily="'DM Mono',monospace">fill →</text>
+
+  <text x={180} y={145} textAnchor="middle" fill={C.mist} fontSize={8}
+    fontFamily="'Syne',sans-serif" letterSpacing="2">FAIR VALUE GAP</text>
+</svg>
+```
+
+);
+}
+
+// ── LIQUIDITY SWEEP ILLUSTRATION
+function LiquiditySweep({ width = 400, height = 180 }) {
+const [phase, setPhase] = useState(0);
+
+useEffect(() => {
+const id = setInterval(() => setPhase(p => (p + 1) % 3), 2000);
+return () => clearInterval(id);
+}, []);
+
+return (
+<svg width={width} height={height} style={{ overflow: “visible” }}>
+{/* Grid */}
+{[50, 100, 150].map(y => <line key={y} x1={0} y1={y} x2={width} y2={y} stroke={C.line} strokeWidth={1} />)}
+
+```
+  {/* Equal Highs line */}
+  <line x1={20} y1={50} x2={320} y2={50} stroke={C.gold} strokeWidth={1.5} strokeDasharray="5,4" opacity={0.8} />
+  <text x={325} y={54} fill={C.gold} fontSize={9} fontFamily="'DM Mono',monospace">EQH</text>
+  <text x={325} y={64} fill={C.mist} fontSize={8} fontFamily="'DM Mono',monospace">Stops ici</text>
+
+  {/* Candles before sweep */}
+  {[[30,80,55,90], [60,70,45,95], [90,65,48,88], [120,68,50,85]].map(([x,o,c,h], i) => (
+    <g key={i}>
+      <line x1={x+8} y1={h} x2={x+8} y2={130} stroke={C.em} strokeWidth={1.5} />
+      <rect x={x} y={c} width={16} height={o-c} fill={C.em} rx={1} opacity={0.85} />
+    </g>
+  ))}
+
+  {/* Sweep candle */}
+  {phase >= 1 && (
+    <g>
+      <line x1={168} y1={28} x2={168} y2={130} stroke={C.cr} strokeWidth={2} />
+      <rect x={160} y={50} width={16} height={50} fill={C.cr} rx={1} opacity={0.9} />
+      {/* Sweep annotation */}
+      <rect x={140} y={18} width={90} height={16} rx={4} fill={`${C.cr}25`} stroke={C.cr} strokeWidth={1} />
+      <text x={185} y={29} textAnchor="middle" fill={C.cr} fontSize={8}
+        fontFamily="'DM Mono',monospace" fontWeight="700">SWEEP! STOPS HUNT</text>
+      <path d="M 168,28 L 168,50" stroke={C.cr} strokeWidth={2}
+        markerEnd="url(#arrowRed)" style={{ animation: phase >= 1 ? "none" : "" }} />
+    </g>
+  )}
+
+  {/* Reversal candles */}
+  {phase >= 2 && (
+    <g>
+      {[[196,100,62,105], [226,62,45,105], [256,45,30,108]].map(([x,o,c,h], i) => (
+        <g key={i} style={{ animation: `fadeIn 0.4s ${i*0.2}s ease forwards`, opacity: 0 }}>
+          <line x1={x+8} y1={h} x2={x+8} y2={150} stroke={C.em} strokeWidth={1.5} />
+          <rect x={x} y={c} width={16} height={o-c} fill={C.em} rx={1} />
+        </g>
+      ))}
+      <text x={256} y={22} textAnchor="middle" fill={C.em} fontSize={9}
+        fontFamily="'DM Mono',monospace" fontWeight="700">REVERSAL ↑</text>
+    </g>
+  )}
+
+  {/* Stop loss icons */}
+  {[35, 65, 95, 125].map(x => (
+    <text key={x} x={x} y={43} textAnchor="middle" fontSize={8} fill={C.gold} opacity={phase >= 1 ? 0.3 : 0.8}>🔒</text>
+  ))}
+
+  {/* Phase labels */}
+  <rect x={0} y={160} width={width} height={20} rx={4} fill="transparent" />
+  {["Accumulation des stops", "Liquidity Sweep", "Reversal — institutions entrent"].map((t, i) => (
+    <text key={i} x={10 + i * 130} y={172} fill={i <= phase ? [C.gold, C.cr, C.em][i] : C.mist}
+      fontSize={8} fontFamily="'DM Mono',monospace">
+      {i <= phase ? `✓ ${t}` : `○ ${t}`}
+    </text>
+  ))}
+</svg>
+```
+
+);
+}
+
+// ── SESSION CLOCK ILLUSTRATION
+function SessionClock({ width = 280, height = 280 }) {
+const [now, setNow] = useState(new Date());
+useEffect(() => {
+const id = setInterval(() => setNow(new Date()), 1000);
+return () => clearInterval(id);
+}, []);
+
+const cx = 140, cy = 140, r = 110;
+const sessions = [
+{ name: “Asie”, start: 21, end: 8, color: “#4FC3F7”, label: “Tokyo” },
+{ name: “Londres”, start: 7, end: 17, color: “#9B7FFF”, label: “London” },
+{ name: “NY”, start: 13, end: 22, color: “#FF2D55”, label: “New York” },
+];
+
+const hourToAngle = (h) => ((h % 24) / 24) * 360 - 90;
+const polarToXY = (angle, radius) => ({
+x: cx + radius * Math.cos((angle * Math.PI) / 180),
+y: cy + radius * Math.sin((angle * Math.PI) / 180),
+});
+
+const arcPath = (startH, endH, innerR, outerR, col) => {
+const startA = hourToAngle(startH), endA = hourToAngle(endH);
+const s = polarToXY(startA, outerR), e = polarToXY(endA, outerR);
+const si = polarToXY(startA, innerR), ei = polarToXY(endA, innerR);
+const large = ((endH - startH + 24) % 24) > 12 ? 1 : 0;
+return `M${s.x},${s.y} A${outerR},${outerR} 0 ${large},1 ${e.x},${e.y} L${ei.x},${ei.y} A${innerR},${innerR} 0 ${large},0 ${si.x},${si.y} Z`;
+};
+
+const parisHour = now.getHours() + now.getMinutes() / 60;
+const handAngle = hourToAngle(parisHour);
+const handEnd = polarToXY(handAngle, 85);
+
+return (
+<svg width={width} height={height} style={{ overflow: “visible” }}>
+{/* Background circle */}
+<circle cx={cx} cy={cy} r={r + 8} fill=”#111118” stroke={C.line} strokeWidth={1} />
+
+```
+  {/* Session arcs */}
+  <path d={arcPath(7, 17, 82, 108, C.purple)} fill={C.purple} opacity={0.25} />
+  <path d={arcPath(13, 17, 82, 108, C.cr)} fill={C.cr} opacity={0.35} />
+  <path d={arcPath(21, 8, 60, 78, C.sky)} fill={C.sky} opacity={0.18} />
+  <path d={arcPath(7, 17, 60, 78, C.purple)} fill={C.purple} opacity={0.18} />
+  <path d={arcPath(13, 22, 60, 78, C.cr)} fill={C.cr} opacity={0.18} />
+
+  {/* Hour ticks */}
+  {Array.from({ length: 24 }, (_, h) => {
+    const a = hourToAngle(h);
+    const inner = polarToXY(a, r - 4);
+    const outer = polarToXY(a, r + 2);
+    const label = polarToXY(a, r - 16);
+    return (
+      <g key={h}>
+        <line x1={inner.x} y1={inner.y} x2={outer.x} y2={outer.y}
+          stroke={h % 6 === 0 ? C.white : C.mist} strokeWidth={h % 6 === 0 ? 2 : 1} opacity={0.5} />
+        {h % 6 === 0 && <text x={label.x} y={label.y + 3} textAnchor="middle" fill={C.mist}
+          fontSize={9} fontFamily="'DM Mono',monospace">{h}h</text>}
+      </g>
+    );
+  })}
+
+  {/* Labels */}
+  {[{ h: 12, l: "LDN", c: C.purple }, { h: 17.5, l: "NY/LDN", c: "#FF6B6B" }, { h: 3, l: "ASIA", c: C.sky }].map(({ h, l, c }) => {
+    const pos = polarToXY(hourToAngle(h), 95);
+    return <text key={l} x={pos.x} y={pos.y + 3} textAnchor="middle" fill={c} fontSize={8}
+      fontFamily="'DM Mono',monospace" fontWeight="700">{l}</text>;
+  })}
+
+  {/* Center */}
+  <circle cx={cx} cy={cy} r={30} fill="#16161F" stroke={C.line} strokeWidth={1} />
+  <text x={cx} y={cy - 5} textAnchor="middle" fill={C.white} fontSize={11} fontFamily="'DM Mono',monospace" fontWeight="600">
+    {now.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}
+  </text>
+  <text x={cx} y={cy + 10} textAnchor="middle" fill={C.mist} fontSize={8} fontFamily="'DM Mono',monospace">Paris</text>
+
+  {/* Hand */}
+  <line x1={cx} y1={cy} x2={handEnd.x} y2={handEnd.y} stroke={C.gold} strokeWidth={2.5} strokeLinecap="round" />
+  <circle cx={cx} cy={cy} r={4} fill={C.gold} />
+
+  {/* Legend */}
+  {[{ c: C.purple, l: "Londres 8h-17h" }, { c: C.cr, l: "New York 13h-22h" }, { c: C.sky, l: "Asie 21h-8h" }].map(({ c, l }, i) => (
+    <g key={i} transform={`translate(20,${height - 50 + i * 16})`}>
+      <rect width={8} height={8} rx={2} fill={c} opacity={0.7} />
+      <text x={14} y={8} fill={C.mist} fontSize={9} fontFamily="'DM Mono',monospace">{l}</text>
+    </g>
+  ))}
+</svg>
+```
+
+);
+}
+
+// ── RISK REWARD VISUAL
+function RRVisual({ rr = 2 }) {
+const riskH = 60, tpH = riskH * rr;
+const maxH = Math.max(tpH, 120);
+const w = 200;
+
+return (
+<svg width={w} height={maxH + 80} style={{ overflow: “visible” }}>
+{/* Entry line */}
+<line x1={0} y1={tpH + 20} x2={w} y2={tpH + 20} stroke={C.gold} strokeWidth={1.5} strokeDasharray=“6,3” />
+<text x={w + 5} y={tpH + 24} fill={C.gold} fontSize={9} fontFamily=”‘DM Mono’,monospace”>ENTRÉE</text>
+
+```
+  {/* SL zone */}
+  <rect x={40} y={tpH + 20} width={80} height={riskH} rx={4}
+    fill={C.cr} opacity={0.15} stroke={C.cr} strokeWidth={1} strokeDasharray="3,2" />
+  <line x1={80} y1={tpH + 20} x2={80} y2={tpH + riskH + 20} stroke={C.cr} strokeWidth={1.5} />
+  <text x={130} y={tpH + riskH / 2 + 25} fill={C.cr} fontSize={9} fontFamily="'DM Mono',monospace">-1R</text>
+  <text x={5} y={tpH + riskH / 2 + 25} fill={C.cr} fontSize={9} fontFamily="'DM Mono',monospace">SL</text>
+
+  {/* TP zone */}
+  <rect x={40} y={20} width={80} height={tpH} rx={4}
+    fill={C.em} opacity={0.15} stroke={C.em} strokeWidth={1} strokeDasharray="3,2} " />
+  <line x1={80} y1={20} x2={80} y2={tpH + 20} stroke={C.em} strokeWidth={1.5} />
+  <text x={130} y={tpH / 2 + 25} fill={C.em} fontSize={9} fontFamily="'DM Mono',monospace">+{rr}R</text>
+  <text x={5} y={tpH / 2 + 25} fill={C.em} fontSize={9} fontFamily="'DM Mono',monospace">TP</text>
+
+  {/* Ratio label */}
+  <rect x={55} y={tpH + riskH + 30} width={90} height={22} rx={6}
+    fill={rr >= 2 ? `${C.em}20` : `${C.cr}20`} stroke={rr >= 2 ? C.em : C.cr} strokeWidth={1} />
+  <text x={100} y={tpH + riskH + 45} textAnchor="middle"
+    fill={rr >= 2 ? C.em : C.cr} fontSize={11} fontFamily="'Syne',sans-serif" fontWeight="700">
+    R:R 1:{rr}
+  </text>
+</svg>
+```
+
+);
+}
+
+// ── MINI CHART for lessons
+function MiniChart({ data, width = 200, height = 80, color = C.em }) {
+if (!data || data.length < 2) return null;
+const minV = Math.min(…data), maxV = Math.max(…data);
+const range = maxV - minV || 1;
+const stepX = width / (data.length - 1);
+const toY = v => height - ((v - minV) / range) * height;
+const pts = data.map((v, i) => `${i * stepX},${toY(v)}`).join(” “);
+const area = `M0,${height} L${pts} L${(data.length-1)*stepX},${height} Z`;
+
+return (
+<svg width={width} height={height} style={{ overflow: “hidden” }}>
+<defs>
+<linearGradient id={`mg-${color.replace("#","")}`} x1=“0” y1=“0” x2=“0” y2=“1”>
+<stop offset="0%" stopColor={color} stopOpacity="0.3" />
+<stop offset="100%" stopColor={color} stopOpacity="0" />
+</linearGradient>
+</defs>
+<path d={area} fill={`url(#mg-${color.replace("#","")})`} />
+<polyline points={pts} fill="none" stroke={color} strokeWidth={1.5} />
+</svg>
+);
+}
+
+// ════════════════════════════════════════════════════════════
+//  DATA
+// ════════════════════════════════════════════════════════════
+
+const QUIZ_DATA = {
+basics: { title: “Fondations Forex”, color: C.gold, questions: [
+{ q: “Combien de dollars s’échangent quotidiennement sur le Forex ?”, options: [“500 milliards”, “1 000 milliards”, “6 600 milliards”, “100 milliards”], answer: 2, explanation: “6 600 milliards de dollars par jour — 25x le NYSE. C’est le marché le plus liquide de la planète.” },
+{ q: “Sur EUR/USD, qu’est-ce qu’1 pip ?”, options: [“2ème décimale (0.01)”, “4ème décimale (0.0001)”, “5ème décimale”, “3ème décimale”], answer: 1, explanation: “Sur EUR/USD, 1 pip = 4ème décimale. 1.0850 → 1.0851 = 1 pip. Sur JPY : 2ème décimale.” },
+{ q: “Valeur d’1 pip sur un micro-lot EUR/USD ?”, options: [“1$”, “10$”, “0.01$”, “0.10$”], answer: 3, explanation: “Micro-lot (1000 unités) = 0.10$ par pip. Mini-lot = 1$. Lot standard = 10$.” },
+{ q: “Quel levier maximum en phase d’apprentissage ?”, options: [“1:100”, “1:50”, “1:5 à 1:10”, “1:200”], answer: 2, explanation: “Maximum 1:5 à 1:10 en apprentissage. Avec 1:100, un mouvement de 1% contre toi = compte liquidé.” },
+{ q: “Quelle paire commencer absolument en débutant ?”, options: [“GBP/JPY”, “XAU/USD”, “EUR/USD”, “USD/TRY”], answer: 2, explanation: “EUR/USD : 28% du volume mondial, spreads ultra-faibles, patterns les plus prévisibles. La seule paire du débutant pendant 6 mois.” },
+]},
+smc: { title: “Smart Money Concepts”, color: C.purple, questions: [
+{ q: “Qu’est-ce qu’un Order Block ?”, options: [“Zone de résistance classique”, “Dernière bougie contra-tendance avant un mouvement fort”, “Indicateur de volume”, “Zone de consolidation”], answer: 1, explanation: “OB = dernière bougie dans la direction opposée avant un mouvement impulsif fort. Zone d’accumulation institutionnelle. Le prix y revient souvent.” },
+{ q: “FVG signifie ?”, options: [“Fast Volume Gap”, “Fair Value Gap — zone de déséquilibre sur 3 bougies”, “Fixed Value Grid”, “Forex Volatility Gap”], answer: 1, explanation: “Fair Value Gap : zone entre 3 bougies où aucun échange n’a eu lieu lors d’un mouvement rapide. Le marché tend à combler ces zones.” },
+{ q: “Qu’est-ce qu’un BOS ?”, options: [“Bearish Order Signal”, “Break of Structure — cassure d’un High/Low significatif”, “Buy or Sell”, “Base of Support”], answer: 1, explanation: “BOS = Break of Structure. Le prix casse un High ou Low confirmant la continuation de la tendance.” },
+{ q: “Un Liquidity Sweep, c’est ?”, options: [“Un indicateur de momentum”, “Le marché dépassant un niveau clé pour chasser les stops avant d’inverser”, “Une stratégie de diversification”, “Un ordre limit”], answer: 1, explanation: “Le marché franchit brièvement les Equal Highs/Lows pour déclencher les stops retail, récupère la liquidité, puis inverse violemment.” },
+{ q: “CHoCH signifie ?”, options: [“Current High Chart”, “Change of Character — premier signal de retournement”, “Closing High Candle”, “Channel High or Close”], answer: 1, explanation: “CHoCH = premier signal que la tendance pourrait s’inverser. Le prix casse la structure contre la tendance en cours.” },
+]},
+risk: { title: “Risk Management”, color: C.cr, questions: [
+{ q: “Risque max sur 1 000€ avec règle des 1% ?”, options: [“100€”, “50€”, “10€”, “1€”], answer: 2, explanation: “1000€ × 1% = 10€ max. Cette règle permet d’encaisser 50 pertes consécutives en conservant 60% du capital.” },
+{ q: “Avec 40% win rate et R:R 1:2, es-tu profitable ?”, options: [“Non, il faut 50%+”, “Oui, mathématiquement”, “Non, il faut 60%+”, “Impossible à dire”], answer: 1, explanation: “E = (0.40×2) − (0.60×1) = +0.20R par trade. Sur 100 trades = +20R de profit. Un 1:2 avec 40% WR est PROFITABLE.” },
+{ q: “Quand arrêter de trader pour la journée ?”, options: [“Après 1 perte”, “Après 2 gains”, “Après -5% drawdown journalier”, “Après 8h de session”], answer: 2, explanation: “-5% de drawdown journalier = arrêt immédiat. Empêche de transformer une mauvaise journée en catastrophe.” },
+{ q: “R:R minimum acceptable par trade ?”, options: [“1:1”, “1:1.5”, “1:2”, “1:3”], answer: 2, explanation: “1:2 minimum. En dessous, l’expectancy est trop faible pour compenser un win rate imparfait sur le long terme.” },
+{ q: “Formule de position sizing (micro-lots) ?”, options: [“Balance × Risque%”, “(Balance × 1%) ÷ (SL pips × 0.10)”, “Risque ÷ SL pips”, “Balance ÷ 100”], answer: 1, explanation: “(Balance × 1%) ÷ (SL pips × 0.10) = micro-lots. Ex: 1000€, SL 20 pips → 10÷2 = 5 micro-lots.” },
+]},
+psychology: { title: “Psychologie”, color: C.em, questions: [
+{ q: “Quelle part du succès en trading est psychologique ?”, options: [“20%”, “40%”, “60%”, “80%”], answer: 3, explanation: “80% psychologie, 20% technique. La plupart des traders ont une bonne stratégie — ils échouent car ils ne peuvent pas l’appliquer sous pression émotionnelle.” },
+{ q: “Qu’est-ce que le FOMO ?”, options: [“Un indicateur technique”, “Fear of Missing Out — entrer par peur de rater”, “Un type d’ordre”, “Une stratégie de couverture”], answer: 1, explanation: “FOMO = entrer par peur de rater un mouvement → tu achètes au sommet exactement là où les institutions vendent.” },
+{ q: “Après combien de pertes consécutives faire une pause de 24h ?”, options: [“1”, “2”, “3”, “5”], answer: 2, explanation: “3 pertes consécutives = pause 24h obligatoire. Le cerveau entre en mode ‘récupération de perte’ — le pire état pour trader.” },
+{ q: “Sur combien de trades minimum évaluer ses performances ?”, options: [“10”, “25”, “50”, “100 minimum”], answer: 3, explanation: “100 trades minimum pour une évaluation statistiquement valide. En dessous, les résultats sont trop aléatoires.” },
+{ q: “Quel livre est la bible de la psychologie du trading ?”, options: [“Technical Analysis — Murphy”, “Trading in the Zone — Mark Douglas”, “Market Wizards — Schwager”, “Reminiscences of a Stock Operator”], answer: 1, explanation: “‘Trading in the Zone’ de Mark Douglas. À lire deux fois minimum. Transforme fondamentalement l’approche du marché.” },
+]},
+};
+
+const ROADMAP_DATA = [
+{ phase: “PHASE 1 · Mois 1-3”, title: “Fondations & Démo”, desc: “Bases absolues, compte démo, 50 trades minimum sur EUR/USD, 1 concept SMC par semaine.”, ms: [“50 trades démo”, “Journal actif”, “Bases SMC”, “Routine établie”] },
+{ phase: “PHASE 2 · Mois 4-9”, title: “Backtesting & Validation”, desc: “200 trades backtestés via TradingView Replay, win rate ≥48%, stratégie documentée.”, ms: [“200 backtests”, “Win rate ≥48%”, “R:R moyen ≥1.8”, “Stratégie prouvée”] },
+{ phase: “PHASE 3 · Mois 10-18”, title: “Micro-compte réel”, desc: “Compte réel 200-500€ max, risque 0.5%, focus absolu sur la discipline.”, ms: [“Compte ouvert”, “0.5% risque”, “Discipline ✓”, “Journal détaillé”] },
+{ phase: “PHASE 4 · An 2”, title: “Consistance”, desc: “3-5% mensuel sur 6 mois consécutifs, augmentation du capital, étude des Prop Firms.”, ms: [“3-5%/mois x6”, “Capital augmenté”, “Stats analysées”, “Prop Firms étudiées”] },
+{ phase: “PHASE 5 · An 3-4”, title: “Prop Firm Challenge”, desc: “Challenge FTMO, compte financé 25k+, premiers revenus trading réguliers.”, ms: [“FTMO passé”, “Compte 25k+”, “Revenu régulier”, “Multi-comptes”] },
+{ phase: “PHASE 6 · An 5+”, title: “Indépendance & Héritage”, desc: “100k+ sous gestion, liberté financière, connaissance documentée pour transmission.”, ms: [“100k+ géré”, “Liberté”, “Savoir transmis”, “Héritage construit”] },
+];
+
+// ════════════════════════════════════════════════════════════
+//  SHARED COMPONENTS
+// ════════════════════════════════════════════════════════════
+
+function Card({ children, style = {}, glass = false }) {
+const [h, setH] = useState(false);
+return (
+<div onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)}
+style={{ background: glass ? “rgba(14,14,20,0.7)” : C.ink2, border: `1px solid ${h ? C.line2 : C.line}`, borderRadius: 14, transition: “all 0.25s”, backdropFilter: glass ? “blur(12px)” : “none”, …style }}>
+{children}
+</div>
+);
+}
+
+function Tag({ children, color = C.gold }) {
+return <span style={{ fontSize: 9, padding: “3px 9px”, borderRadius: 20, letterSpacing: 1, textTransform: “uppercase”, fontWeight: 500, color, background: `${color}18`, border: `1px solid ${color}30` }}>{children}</span>;
+}
+
+function SectionTitle({ num, title, desc }) {
+return (
+<div style={{ marginBottom: 32 }}>
+<div style={{ display: “flex”, alignItems: “center”, gap: 16, marginBottom: desc ? 12 : 0 }}>
+<span style={{ fontSize: 9, color: C.gold, letterSpacing: “3px”, textTransform: “uppercase” }}>{num}</span>
+<h2 style={{ fontFamily: “‘Syne’,sans-serif”, fontWeight: 800, fontSize: 26, color: C.white, letterSpacing: “-0.5px”, margin: 0 }}>{title}</h2>
+<div style={{ flex: 1, height: 1, background: C.line }} />
+</div>
+{desc && <p style={{ fontSize: 12, color: C.mist, lineHeight: 1.8, maxWidth: 700, margin: 0 }}>{desc}</p>}
+</div>
+);
+}
+
+function Callout({ children, type = “gold” }) {
+const colors = { gold: C.gold, red: C.cr, green: C.em, purple: C.purple };
+const c = colors[type] || C.gold;
+return (
+<div style={{ background: `${c}07`, border: `1px solid ${c}25`, borderRadius: 10, padding: “14px 18px”, margin: “16px 0”, fontSize: 12, color: `${c}ee`, lineHeight: 1.8 }}>
+{children}
+</div>
+);
+}
+
+// ════════════════════════════════════════════════════════════
+//  NAVIGATION
+// ════════════════════════════════════════════════════════════
+
+const NAV = [
+{ id: “dashboard”, icon: “◈”, label: “Dashboard” },
+{ id: “guide”, icon: “📘”, label: “Guide & Illustrations” },
+{ id: “smc”, icon: “🏦”, label: “Smart Money” },
+{ id: “sessions”, icon: “⏰”, label: “Sessions Live” },
+{ id: “quiz”, icon: “🧠”, label: “Quiz interactifs” },
+{ id: “simulator”, icon: “⚡”, label: “Simulateur” },
+{ id: “calculator”, icon: “🧮”, label: “Calculateurs” },
+{ id: “journal”, icon: “📓”, label: “Journal” },
+{ id: “checklist”, icon: “✅”, label: “Checklist” },
+{ id: “roadmap”, icon: “🗺”, label: “Roadmap” },
+];
+
+function Sidebar({ page, onNav }) {
+return (
+<aside style={{ position: “fixed”, top: 0, left: 0, width: 252, height: “100vh”, background: C.ink2, borderRight: `1px solid ${C.line}`, display: “flex”, flexDirection: “column”, zIndex: 100, overflowY: “auto” }}>
+<div style={{ padding: “22px 18px 16px”, borderBottom: `1px solid ${C.line}`, flexShrink: 0 }}>
+<div style={{ display: “flex”, alignItems: “center”, gap: 11, marginBottom: 10 }}>
+<div style={{ width: 36, height: 36, background: C.gold, borderRadius: 9, display: “flex”, alignItems: “center”, justifyContent: “center”, fontFamily: “‘Syne’,sans-serif”, fontWeight: 800, fontSize: 13, color: C.ink, boxShadow: “0 0 20px rgba(232,224,0,0.3)”, flexShrink: 0 }}>AT</div>
+<div>
+<div style={{ fontFamily: “‘Syne’,sans-serif”, fontWeight: 800, fontSize: 13, color: C.white }}>AVRE Trading</div>
+<div style={{ fontSize: 9, color: C.mist, letterSpacing: “2px”, textTransform: “uppercase” }}>Academy · Jayson</div>
+</div>
+</div>
+<div style={{ fontSize: 10, color: C.gold, letterSpacing: “1px”, padding: “5px 10px”, background: `${C.gold}10`, borderRadius: 6, border: `1px solid ${C.gold}22`, textAlign: “center” }}>Flow & Power · 2026</div>
+</div>
+<div style={{ padding: “10px 10px”, flex: 1 }}>
+{NAV.map(n => (
+<div key={n.id} onClick={() => onNav(n.id)}
+style={{ display: “flex”, alignItems: “center”, gap: 10, padding: “9px 12px”, borderRadius: 10, cursor: “pointer”, marginBottom: 2, background: page === n.id ? `${C.gold}10` : “transparent”, border: `1px solid ${page === n.id ? `${C.gold}25` : "transparent"}`, transition: “all 0.18s” }}>
+<span style={{ fontSize: 14, width: 20, textAlign: “center”, flexShrink: 0 }}>{n.icon}</span>
+<span style={{ fontFamily: “‘Syne’,sans-serif”, fontSize: 12, fontWeight: 500, color: page === n.id ? C.gold : C.mist }}>{n.label}</span>
+</div>
+))}
+</div>
+<div style={{ padding: “14px 18px”, borderTop: `1px solid ${C.line}`, flexShrink: 0 }}>
+<div style={{ fontSize: 10, color: C.mist, lineHeight: 1.7, fontStyle: “italic” }}>“La patience est une stratégie.”</div>
+</div>
+</aside>
+);
+}
+
+function Topbar({ page, trades }) {
+const [time, setTime] = useState(””);
+useEffect(() => {
+const t = () => setTime(new Date().toLocaleTimeString(“fr-FR”, { hour: “2-digit”, minute: “2-digit”, second: “2-digit” }));
+t(); const id = setInterval(t, 1000); return () => clearInterval(id);
+}, []);
+const titles = { dashboard: “Dashboard”, guide: “Guide & Illustrations”, smc: “Smart Money Concepts”, sessions: “Sessions Live”, quiz: “Quiz interactifs”, simulator: “Simulateur de trades”, calculator: “Calculateurs”, journal: “Journal de trading”, checklist: “Pre-trade Checklist”, roadmap: “Roadmap 5 ans” };
+const wins = trades.filter(t => t.outcome === “win”).length;
+const total = trades.length;
+return (
+<div style={{ position: “sticky”, top: 0, zIndex: 50, height: 56, background: “rgba(6,6,10,0.92)”, backdropFilter: “blur(20px)”, borderBottom: `1px solid ${C.line}`, display: “flex”, alignItems: “center”, padding: “0 32px”, gap: 18 }}>
+<div style={{ fontFamily: “‘Syne’,sans-serif”, fontWeight: 700, fontSize: 15, color: C.white, flex: 1 }}>{titles[page]}</div>
+{total > 0 && <span style={{ fontSize: 9, color: C.em, padding: “4px 10px”, background: `${C.em}12`, borderRadius: 20, border: `1px solid ${C.em}30`, letterSpacing: 1 }}>WR {Math.round(wins / total * 100)}%</span>}
+<span style={{ fontSize: 9, padding: “4px 12px”, background: `${C.em}12`, borderRadius: 20, border: `1px solid ${C.em}25`, color: C.em, display: “flex”, alignItems: “center”, gap: 6, letterSpacing: “1.5px” }}>
+<span style={{ width: 5, height: 5, borderRadius: “50%”, background: C.em, display: “inline-block”, animation: “blink 2s infinite” }} />EN DIRECT
+</span>
+<span style={{ fontSize: 12, color: C.mist, letterSpacing: 1 }}>{time}</span>
+</div>
+);
+}
+
+// ════════════════════════════════════════════════════════════
+//  PAGES
+// ════════════════════════════════════════════════════════════
+
+// ── DASHBOARD
+function Dashboard({ trades }) {
+const wins = trades.filter(t => t.outcome === “win”).length;
+const losses = trades.filter(t => t.outcome === “loss”).length;
+const total = trades.length;
+const pnl = trades.reduce((s, t) => s + (t.pnl || 0), 0);
+const wr = total ? Math.round(wins / total * 100) : 0;
+
+return (
+<div>
+{/* HERO with live chart */}
+<div style={{ display: “grid”, gridTemplateColumns: “1fr 320px”, gap: 20, marginBottom: 22 }}>
+<Card style={{ padding: 40, background: “linear-gradient(135deg,#0e0e14,#131300)”, border: “1px solid rgba(232,224,0,0.14)”, overflow: “hidden”, position: “relative” }}>
+<div style={{ position: “absolute”, top: -60, right: -60, width: 300, height: 300, borderRadius: “50%”, background: “radial-gradient(circle,rgba(232,224,0,0.06),transparent 70%)”, pointerEvents: “none” }} />
+<div style={{ fontSize: 9, color: C.gold, letterSpacing: “3px”, textTransform: “uppercase”, marginBottom: 12, display: “flex”, alignItems: “center”, gap: 10 }}>
+<span style={{ width: 20, height: 1, background: C.gold, display: “inline-block” }} />Jayson · AVRE Trading Academy · 2026
+</div>
+<div style={{ fontFamily: “‘Instrument Serif’,serif”, fontSize: 68, lineHeight: 0.9, color: C.white, marginBottom: 8, letterSpacing: “-3px” }}>
+Flow &<br /><span style={{ color: C.gold, fontStyle: “italic” }}>Power.</span>
+</div>
+<div style={{ fontSize: 10, color: C.mist, letterSpacing: “3px”, textTransform: “uppercase”, marginBottom: 24 }}>Discipline · Patience · Maîtrise · Liberté</div>
+{/* Live chart */}
+<div style={{ background: `${C.ink3}`, borderRadius: 10, padding: “12px 12px 6px”, border: `1px solid ${C.line}`, marginBottom: 16 }}>
+<div style={{ display: “flex”, justifyContent: “space-between”, alignItems: “center”, marginBottom: 6 }}>
+<span style={{ fontSize: 9, color: C.mist, letterSpacing: 1, fontFamily: “‘DM Mono’,monospace” }}>EUR/USD · H1</span>
+<span style={{ fontSize: 9, color: C.em, letterSpacing: 1, fontFamily: “‘DM Mono’,monospace” }}>● LIVE</span>
+</div>
+<LiveChart width={440} height={130} />
+</div>
+<div style={{ fontFamily: “‘Instrument Serif’,serif”, fontStyle: “italic”, fontSize: 13, color: C.fog, lineHeight: 1.8, paddingLeft: 14, borderLeft: `2px solid ${C.gold}` }}>
+“Les marchés récompensent ceux qui préparent, pas ceux qui espèrent.”
+</div>
+</Card>
+
+```
+    {/* Stats */}
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, alignContent: "start" }}>
+      {[{ l: "Gagnants", v: wins, c: C.em }, { l: "Perdants", v: losses, c: C.cr }, { l: "Win Rate", v: total ? wr + "%" : "—", c: C.gold }, { l: "P&L Total", v: (pnl >= 0 ? "+" : "") + pnl.toFixed(2) + "€", c: pnl >= 0 ? C.em : C.cr }].map((s, i) => (
+        <Card key={i} style={{ padding: "18px 20px", position: "relative", overflow: "hidden" }}>
+          <div style={{ position: "absolute", bottom: 0, left: 0, width: "100%", height: 2, background: `linear-gradient(90deg,${s.c},transparent)` }} />
+          <div style={{ fontSize: 9, color: C.mist, letterSpacing: 2, textTransform: "uppercase", marginBottom: 10 }}>{s.l}</div>
+          <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 32, color: s.c, letterSpacing: -1.5, lineHeight: 1 }}>{s.v}</div>
+        </Card>
+      ))}
+    </div>
+  </div>
+
+  {/* Rules */}
+  <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 14, marginBottom: 22 }}>
+    {[
+      { icon: "💰", t: "1% max par trade", d: "Sur 1 000€ = 10€ max de risque. Non-négociable. Te maintient en vie même avec 40% de win rate." },
+      { icon: "⏰", t: "London & NY uniquement", d: "London 8h-12h, NY 13h-17h. L'overlap 13h-17h = peak absolu de volatilité et d'opportunités." },
+      { icon: "🧠", t: "Zéro vengeance", d: "Après 2 pertes consécutives, ferme tout. Le marché sera là demain. Ton capital doit l'être aussi." },
+      { icon: "🎯", t: "Minimum 1:2 R:R", d: "Avec 40% WR et 1:2 R:R, expectancy = +0.20R/trade. Les mathématiques gagnent toujours." },
+    ].map((r, i) => (
+      <Card key={i} style={{ padding: 20 }}>
+        <div style={{ fontSize: 20, marginBottom: 10 }}>{r.icon}</div>
+        <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 600, fontSize: 12, color: C.white, marginBottom: 6 }}>{r.t}</div>
+        <div style={{ fontSize: 11, color: C.mist, lineHeight: 1.7 }}>{r.d}</div>
+      </Card>
+    ))}
+  </div>
+
+  {/* Heritage */}
+  <Card style={{ padding: 26, background: `${C.purple}06`, border: `1px solid ${C.purple}25` }}>
+    <div style={{ fontSize: 13, color: "rgba(180,160,255,0.9)", lineHeight: 2 }}>
+      🏛️ <strong style={{ color: C.white }}>Pour Jayson, et un jour pour ses enfants —</strong> Chaque leçon apprise, chaque trade journalisé, chaque étape cochée construit quelque chose de durable. La maîtrise des marchés financiers ne se délègue pas — elle se transmet. Commence aujourd'hui.
+    </div>
+  </Card>
+</div>
+```
+
+);
+}
+
+// ── GUIDE WITH ILLUSTRATIONS
+function Guide() {
+const [open, setOpen] = useState(null);
+const modules = [
+{
+num: “M01”, title: “Anatomie d’un chandelier”, color: C.gold,
+preview: “OHLC, bougies bullish & bearish, mèches, signaux”,
+illustration: <CandlestickAnatomy />,
+content: <div>
+<p style={{ marginBottom: 12 }}>Chaque chandelier contient 4 informations : <strong>Open, High, Low, Close</strong>. La couleur indique si les acheteurs ou vendeurs ont dominé la période.</p>
+<CandlePatterns width={430} height={130} />
+<Callout type="gold">🎯 Mémorise d’abord le Bullish Engulfing et le Pin Bar. Ces deux patterns de confirmation couvrent 80% de tes entrées en SMC.</Callout>
+<p style={{ fontSize: 12, color: C.fog, lineHeight: 1.9 }}><strong style={{ color: C.white }}>Doji</strong> — Open ≈ Close → indécision totale entre acheteurs et vendeurs. Signal de retournement en fin de tendance.<br /><strong style={{ color: C.white }}>Engulfing bullish</strong> — Grande bougie verte qui avale la rouge précédente. Signal fort de retournement haussier en zone d’OB.<br /><strong style={{ color: C.white }}>Pin Bar</strong> — Longue mèche, petit corps. Rejet massif. Signal le plus fiable en zone d’Order Block.</p>
+</div>
+},
+{
+num: “M02”, title: “Structure de marché”, color: C.em,
+preview: “HH/HL, LL/LH, uptrend, downtrend, range”,
+illustration: <MarketStructure width={340} height={160} type="uptrend" />,
+content: <div>
+<div style={{ display: “grid”, gridTemplateColumns: “1fr 1fr”, gap: 16, marginBottom: 20 }}>
+<div>
+<div style={{ fontSize: 9, color: C.em, letterSpacing: 2, marginBottom: 8, fontFamily: “‘DM Mono’,monospace” }}>UPTREND → BUY ONLY</div>
+<MarketStructure width={220} height={160} type="uptrend" />
+</div>
+<div>
+<div style={{ fontSize: 9, color: C.cr, letterSpacing: 2, marginBottom: 8, fontFamily: “‘DM Mono’,monospace” }}>DOWNTREND → SELL ONLY</div>
+<MarketStructure width={220} height={160} type="downtrend" />
+</div>
+</div>
+<Callout type="gold">🎯 LOI ABSOLUE : Ne trade JAMAIS contre la tendance du Daily. Si le Daily est haussier (HH+HL), tu prends uniquement des BUY sur tous les timeframes inférieurs.</Callout>
+</div>
+},
+{
+num: “M03”, title: “Les timeframes — Top-Down”, color: C.sky,
+preview: “Daily → H4 → H1 : analyse multi-timeframe”,
+illustration: null,
+content: <div>
+<div style={{ display: “flex”, flexDirection: “column”, gap: 10 }}>
+{[{ tf: “DAILY”, role: “BIAIS”, desc: “Détermine la direction dominante. Consulté chaque matin. Ta boussole pour toute la journée.”, color: C.gold },
+{ tf: “H4”, role: “ZONE”, desc: “Confirme la structure. Identifie les Order Blocks, FVG, et niveaux de liquidité importants.”, color: C.em },
+{ tf: “H1”, role: “SETUP”, desc: “Timeframe d’entrée principal. Attends le BOS dans la direction du Daily avant d’entrer.”, color: C.sky },
+{ tf: “M15”, role: “PRÉCISION”, desc: “Affinage optionnel. Trouve l’OB ou FVG en M15 pour maximiser le R:R.”, color: C.purple }].map(({ tf, role, desc, color }) => (
+<div key={tf} style={{ display: “flex”, gap: 16, padding: “14px 18px”, background: `${color}08`, border: `1px solid ${color}20`, borderRadius: 10 }}>
+<div style={{ fontFamily: “‘Syne’,sans-serif”, fontWeight: 800, fontSize: 16, color, minWidth: 50, letterSpacing: -0.5 }}>{tf}</div>
+<div>
+<div style={{ fontSize: 9, color, letterSpacing: 2, textTransform: “uppercase”, marginBottom: 4 }}>{role}</div>
+<div style={{ fontSize: 12, color: C.fog, lineHeight: 1.7 }}>{desc}</div>
+</div>
+</div>
+))}
+</div>
+<Callout type="green">💡 Méthode Top-Down : commence toujours par le DAILY, descends vers H4, puis H1. Ne jamais entrer sans avoir regardé le contexte du timeframe supérieur.</Callout>
+</div>
+},
+{
+num: “M04”, title: “Sessions & Killzones”, color: C.purple,
+preview: “London Open, NY Open, Asian Range — quand trader”,
+illustration: null,
+content: <div>
+<div style={{ display: “grid”, gridTemplateColumns: “1fr 300px”, gap: 20, alignItems: “start” }}>
+<div>
+{[{ n: “🌏 Asie (22h-8h)”, c: C.sky, desc: “Volume faible. Range étroit. Le marché accumule la liquidité pour le mouvement londonien. Les Equal Highs/Lows créés ici seront chassés à l’ouverture de Londres.” },
+{ n: “💂 London Open (7h-9h) ⭐”, c: C.purple, desc: “L’heure d’or. Les institutions londoniennes entrent avec des volumes massifs. Le prix chasse souvent l’Asian Range avant de partir dans la vraie direction.” },
+{ n: “🗽 NY Open (13h-15h) ⭐”, c: C.cr, desc: “Deuxième meilleure fenêtre. Continuation ou reversal du mouvement londonien. L’overlap 13h-17h est le peak absolu de volatilité.” },
+{ n: “😴 Pause (11h30-13h)”, c: C.mist, desc: “Volume réduit avant l’ouverture NY. Évite d’ouvrir de nouvelles positions dans cette fenêtre.” }].map(({ n, c, desc }) => (
+<div key={n} style={{ padding: “14px 0”, borderBottom: `1px solid ${C.line}` }}>
+<div style={{ fontFamily: “‘Syne’,sans-serif”, fontWeight: 600, fontSize: 13, color: c, marginBottom: 4 }}>{n}</div>
+<div style={{ fontSize: 12, color: C.mist, lineHeight: 1.7 }}>{desc}</div>
+</div>
+))}
+</div>
+<div style={{ position: “sticky”, top: 80 }}>
+<div style={{ fontSize: 9, color: C.mist, letterSpacing: 2, textTransform: “uppercase”, marginBottom: 12, textAlign: “center” }}>HORLOGE DES SESSIONS</div>
+<SessionClock width={260} height={260} />
+</div>
+</div>
+</div>
+},
+];
+
+return (
+<div>
+<SectionTitle num="02" title="Guide illustré" desc="Concepts fondamentaux avec visualisations SVG interactives et animées. Clique sur chaque module." />
+<div style={{ display: “flex”, flexDirection: “column”, gap: 14 }}>
+{modules.map(m => (
+<Card key={m.num} style={{ overflow: “hidden”, cursor: “pointer” }}>
+<div onClick={() => setOpen(open === m.num ? null : m.num)}
+style={{ display: “flex”, alignItems: “center”, gap: 18, padding: “20px 26px”, transition: “background 0.2s” }}>
+<div style={{ width: 38, height: 38, borderRadius: 9, background: `${m.color}15`, border: `1px solid ${m.color}30`, display: “flex”, alignItems: “center”, justifyContent: “center”, fontFamily: “‘Syne’,sans-serif”, fontWeight: 800, fontSize: 11, color: m.color, flexShrink: 0 }}>{m.num}</div>
+<div style={{ flex: 1 }}>
+<div style={{ fontFamily: “‘Syne’,sans-serif”, fontWeight: 700, fontSize: 15, color: C.white, marginBottom: 4 }}>{m.title}</div>
+<div style={{ fontSize: 11, color: C.mist }}>{m.preview}</div>
+</div>
+{m.illustration && <div style={{ opacity: 0.6 }}>{m.illustration}</div>}
+<div style={{ fontSize: 16, color: m.color, transform: open === m.num ? “rotate(180deg)” : “none”, transition: “transform 0.3s” }}>▼</div>
+</div>
+{open === m.num && (
+<div style={{ padding: “0 26px 28px”, borderTop: `1px solid ${C.line}` }}>
+<div style={{ marginTop: 20 }}>{m.content}</div>
+</div>
+)}
+</Card>
+))}
+</div>
+</div>
+);
+}
+
+// ── SMC PAGE WITH ILLUSTRATIONS
+function SMCPage() {
+const [obStep, setObStep] = useState(0);
+
+return (
+<div>
+<SectionTitle num="03" title="Smart Money Concepts" desc="Les concepts institutionnels illustrés — Order Blocks, FVG, Liquidity Sweeps, BOS & CHoCH." />
+
+```
+  {/* OB Section */}
+  <Card style={{ padding: 32, marginBottom: 20, overflow: "hidden" }}>
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 32 }}>
+      <div>
+        <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 18, color: C.white, marginBottom: 6 }}>📦 Order Block — Étapes</div>
+        <div style={{ fontSize: 12, color: C.mist, lineHeight: 1.8, marginBottom: 20 }}>L'animation montre les 4 étapes d'un trade sur Order Block. Clique sur les boutons pour avancer manuellement.</div>
+        {["Impulsion initiale", "OB identifié (dernière bougie contra-tendance)", "Retrace vers l'OB (pullback)", "Confirmation & Entrée"].map((s, i) => (
+          <div key={i} onClick={() => setObStep(i)}
+            style={{ display: "flex", gap: 12, padding: "10px 14px", marginBottom: 6, borderRadius: 9, cursor: "pointer", background: obStep === i ? `${C.cr}12` : `${C.ink3}`, border: `1px solid ${obStep === i ? `${C.cr}35` : C.line}`, transition: "all 0.2s" }}>
+            <div style={{ width: 22, height: 22, borderRadius: "50%", background: obStep === i ? C.cr : C.ink, border: `2px solid ${obStep === i ? C.cr : C.line2}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, color: obStep === i ? C.ink : C.mist, fontWeight: 700, flexShrink: 0 }}>{i + 1}</div>
+            <span style={{ fontSize: 12, color: obStep === i ? C.white : C.mist, lineHeight: 1.5 }}>{s}</span>
+          </div>
+        ))}
+        <Callout type="red">📌 La confirmation (étape 4) est NON-NÉGOCIABLE. Entre toujours au CLOSE de la bougie de confirmation — jamais en avance.</Callout>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <OrderBlockDiagram width={480} height={210} />
+      </div>
+    </div>
+  </Card>
+
+  {/* FVG + Liquidity grid */}
+  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 20 }}>
+    <Card style={{ padding: 28 }}>
+      <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 16, color: C.white, marginBottom: 6 }}>⚡ Fair Value Gap</div>
+      <div style={{ fontSize: 12, color: C.mist, lineHeight: 1.8, marginBottom: 20 }}>Zone de déséquilibre entre 3 bougies. Aucun échange n'a eu lieu dans ce gap. Le prix tend à revenir le combler avant de continuer.</div>
+      <FVGDiagram width={340} height={155} />
+      <Callout type="gold">💡 Identifie les FVG sur H1 dans les zones d'OB H4. Quand les deux se superposent → haute confluence → entrée de qualité.</Callout>
+    </Card>
+
+    <Card style={{ padding: 28 }}>
+      <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 16, color: C.white, marginBottom: 6 }}>💧 Liquidity Sweep</div>
+      <div style={{ fontSize: 12, color: C.mist, lineHeight: 1.8, marginBottom: 20 }}>Le marché chasse les stop-loss des traders retail au-delà des Equal Highs/Lows, récupère la liquidité, puis inverse. Animation en 3 phases.</div>
+      <LiquiditySweep width={380} height={165} />
+      <Callout type="purple">🎯 Quand tu vois les stops se faire chasser, ne panique pas — c'est souvent le meilleur signal d'entrée dans la direction opposée.</Callout>
+    </Card>
+  </div>
+
+  {/* BOS / CHoCH */}
+  <Card style={{ padding: 28 }}>
+    <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 16, color: C.white, marginBottom: 20 }}>🔄 BOS & CHoCH — La structure SMC</div>
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+      {[{ name: "BOS — Break of Structure", color: C.em, points: ["Le prix casse un High ou Low significatif", "Dans la MÊME direction que la tendance en cours", "Confirmation que la tendance continue", "→ Signal pour entrer dans la direction du break", "→ Cherche un OB ou FVG proche pour l'entrée"] },
+        { name: "CHoCH — Change of Character", color: C.cr, points: ["Le prix casse la structure CONTRE la tendance", "Premier signal de retournement potentiel", "Nécessite toujours une confirmation supplémentaire", "→ Ne jamais entrer directement sur un CHoCH seul", "→ Attends le BOS dans la nouvelle direction"] }].map(({ name, color, points }) => (
+        <div key={name} style={{ background: `${color}06`, border: `1px solid ${color}20`, borderRadius: 12, padding: 20 }}>
+          <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 600, fontSize: 14, color, marginBottom: 14 }}>{name}</div>
+          {points.map((p, i) => (
+            <div key={i} style={{ display: "flex", gap: 10, fontSize: 12, color: p.startsWith("→") ? color : C.fog, lineHeight: 1.7, marginBottom: 4 }}>
+              <span style={{ color: p.startsWith("→") ? color : C.mist, flexShrink: 0 }}>{p.startsWith("→") ? "→" : "•"}</span>
+              <span>{p.replace("→ ", "")}</span>
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  </Card>
+</div>
+```
+
+);
+}
+
+// ── SESSIONS PAGE
+function SessionsPage() {
+const [candles, setCandles] = useState(() => generateCandles(50));
+useEffect(() => {
+const id = setInterval(() => {
+setCandles(prev => {
+const last = prev[prev.length - 1];
+const body = (Math.random() - 0.48) * 0.0025;
+const open = last.close, close = open + body;
+const high = Math.max(open, close) + Math.random() * 0.001;
+const low = Math.min(open, close) - Math.random() * 0.001;
+return […prev.slice(-49), { open, close, high, low, bull: close >= open }];
+});
+}, 700);
+return () => clearInterval(id);
+}, []);
+
+const prices = candles.flatMap(c => [c.high, c.low]);
+const minP = Math.min(…prices), maxP = Math.max(…prices);
+const range = maxP - minP || 0.001;
+const W = 680, H = 200;
+const cw = W / candles.length;
+const bw = Math.max(cw * 0.6, 3);
+const toY = p => 10 + ((maxP - p) / range) * (H - 20);
+
+return (
+<div>
+<SectionTitle num="04" title="Sessions de trading — Live" desc="Le marché Forex en temps réel simulé avec les sessions actives. Comprendre quand et pourquoi les mouvements se produisent." />
+
+```
+  <div style={{ display: "grid", gridTemplateColumns: "1fr 300px", gap: 20, marginBottom: 24 }}>
+    {/* Live chart full */}
+    <Card style={{ padding: 24 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+        <div>
+          <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 15, color: C.white }}>EUR/USD · H1 · Simulation live</div>
+          <div style={{ fontSize: 10, color: C.mist, letterSpacing: 1, marginTop: 2 }}>{candles[candles.length - 1]?.close.toFixed(5)}</div>
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <Tag color={C.purple}>London</Tag>
+          <Tag color={C.cr}>NY</Tag>
+        </div>
+      </div>
+      <svg width={W} height={H} style={{ overflow: "visible" }}>
+        {/* Session backgrounds */}
+        <rect x={W * 0.28} y={0} width={W * 0.36} height={H} fill={C.purple} opacity={0.04} />
+        <rect x={W * 0.5} y={0} width={W * 0.3} height={H} fill={C.cr} opacity={0.04} />
+        {/* Grid */}
+        {[0.25, 0.5, 0.75].map(t => <line key={t} x1={0} y1={10 + t * (H - 20)} x2={W} y2={10 + t * (H - 20)} stroke={C.line} strokeWidth={1} />)}
+        {/* Session labels */}
+        <text x={W * 0.36} y={H - 5} textAnchor="middle" fill={C.purple} fontSize={8} fontFamily="'DM Mono',monospace" opacity={0.7}>LONDON</text>
+        <text x={W * 0.65} y={H - 5} textAnchor="middle" fill={C.cr} fontSize={8} fontFamily="'DM Mono',monospace" opacity={0.7}>NEW YORK</text>
+        {/* Candles */}
+        {candles.map((c, i) => {
+          const x = i * cw, cx = x + cw / 2;
+          const isLast = i === candles.length - 1;
+          return (
+            <g key={i}>
+              <line x1={cx} y1={toY(c.high)} x2={cx} y2={toY(c.low)} stroke={c.bull ? C.em : C.cr} strokeWidth={isLast ? 1.5 : 1} opacity={isLast ? 1 : 0.8} />
+              <rect x={cx - bw / 2} y={toY(Math.max(c.open, c.close))} width={bw} height={Math.max(Math.abs(toY(c.open) - toY(c.close)), 1.5)} fill={c.bull ? C.em : C.cr} opacity={isLast ? 1 : 0.8} rx={0.5} />
+            </g>
+          );
+        })}
+        {/* Current price */}
+        {(() => {
+          const last = candles[candles.length - 1];
+          const y = toY(last.close);
+          return <>
+            <line x1={0} y1={y} x2={W} y2={y} stroke={C.em} strokeWidth={0.8} strokeDasharray="4,4" opacity={0.4} />
+            <rect x={W - 70} y={y - 9} width={70} height={18} rx={4} fill={C.em} />
+            <text x={W - 35} y={y + 4} textAnchor="middle" fill={C.ink} fontSize={9} fontFamily="'DM Mono',monospace" fontWeight="600">{last.close.toFixed(5)}</text>
+          </>;
+        })()}
+      </svg>
+    </Card>
+
+    {/* Session clock */}
+    <Card style={{ padding: 20, display: "flex", flexDirection: "column", alignItems: "center" }}>
+      <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 600, fontSize: 13, color: C.white, marginBottom: 16, textAlign: "center" }}>Horloge des sessions</div>
+      <SessionClock width={240} height={240} />
+    </Card>
+  </div>
+
+  {/* Session details */}
+  <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16 }}>
+    {[
+      { name: "🌏 Session Asie", time: "22h-8h Paris", color: C.sky, vol: "15%", pair: "JPY pairs", tip: "Crée l'Asian Range. Note les EQH/EQL — ils seront chassés à Londres." },
+      { name: "💂 London Open", time: "7h-9h Paris ⭐", color: C.purple, vol: "35%", pair: "EUR/USD, GBP/USD", tip: "Killzone principale. Le marché chasse souvent l'Asian Range puis part dans la vraie direction." },
+      { name: "🗽 NY Open", time: "13h-15h Paris ⭐", color: C.cr, vol: "25%", pair: "EUR/USD, XAU/USD", tip: "Deuxième meilleure Killzone. L'overlap 13h-17h avec Londres = peak absolu de volatilité." },
+    ].map(s => (
+      <Card key={s.name} style={{ padding: 22, borderTop: `3px solid ${s.color}` }}>
+        <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 14, color: C.white, marginBottom: 4 }}>{s.name}</div>
+        <div style={{ fontSize: 11, color: s.color, marginBottom: 10, letterSpacing: 1 }}>{s.time}</div>
+        <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
+          <Tag color={s.color}>Vol: {s.vol}</Tag>
+          <Tag color={C.mist}>{s.pair}</Tag>
+        </div>
+        <div style={{ fontSize: 11, color: C.mist, lineHeight: 1.7 }}>{s.tip}</div>
+      </Card>
+    ))}
+  </div>
+</div>
+```
+
+);
+}
+
+// ── QUIZ
+function Quiz() {
+const [activeQuiz, setActiveQuiz] = useState(null);
+const [current, setCurrent] = useState(0);
+const [selected, setSelected] = useState(null);
+const [answers, setAnswers] = useState([]);
+const [finished, setFinished] = useState(false);
+
+const start = (key) => { setActiveQuiz(key); setCurrent(0); setSelected(null); setAnswers([]); setFinished(false); };
+const answer = (idx) => {
+if (selected !== null) return;
+setSelected(idx);
+setTimeout(() => {
+const q = QUIZ_DATA[activeQuiz].questions;
+setAnswers(a => […a, { correct: idx === q[current].answer }]);
+if (current < q.length - 1) { setCurrent(c => c + 1); setSelected(null); }
+else setFinished(true);
+}, 1800);
+};
+
+if (!activeQuiz) {
+return (
+<div>
+<SectionTitle num="05" title="Quiz interactifs" desc="4 modules de 5 questions avec explications détaillées et illustrations. Teste tes connaissances." />
+<div style={{ display: “grid”, gridTemplateColumns: “1fr 1fr”, gap: 20 }}>
+{Object.entries(QUIZ_DATA).map(([key, q]) => (
+<Card key={key} style={{ overflow: “hidden”, cursor: “pointer” }} onClick={() => start(key)}>
+<div style={{ height: 4, background: q.color }} />
+<div style={{ padding: 28 }}>
+<div style={{ fontFamily: “‘Syne’,sans-serif”, fontWeight: 700, fontSize: 18, color: C.white, marginBottom: 8 }}>{q.title}</div>
+<div style={{ fontSize: 12, color: C.mist, marginBottom: 20 }}>{q.questions.length} questions · Explications illustrées</div>
+<button style={{ padding: “10px 22px”, background: q.color, color: C.ink, border: “none”, borderRadius: 9, fontFamily: “‘Syne’,sans-serif”, fontWeight: 700, fontSize: 11, cursor: “pointer”, letterSpacing: 1, textTransform: “uppercase” }}>Commencer →</button>
+</div>
+</Card>
+))}
+</div>
+</div>
+);
+}
+
+const qData = QUIZ_DATA[activeQuiz];
+const q = qData.questions[current];
+
+if (finished) {
+const score = answers.filter(a => a.correct).length;
+const pct = Math.round(score / qData.questions.length * 100);
+return (
+<div style={{ maxWidth: 580, margin: “0 auto” }}>
+<Card style={{ padding: 48, textAlign: “center” }}>
+<div style={{ fontSize: 56, marginBottom: 16 }}>{pct >= 80 ? “🎯” : pct >= 60 ? “📈” : “📚”}</div>
+<div style={{ fontFamily: “‘Syne’,sans-serif”, fontWeight: 800, fontSize: 52, color: pct >= 80 ? C.em : pct >= 60 ? C.gold : C.cr, letterSpacing: -2, marginBottom: 8 }}>{pct}%</div>
+<div style={{ fontFamily: “‘Syne’,sans-serif”, fontWeight: 600, fontSize: 17, color: C.white, marginBottom: 20 }}>{score}/{qData.questions.length} bonnes réponses</div>
+<div style={{ display: “flex”, gap: 12, justifyContent: “center” }}>
+<button onClick={() => start(activeQuiz)} style={{ padding: “11px 22px”, background: qData.color, color: C.ink, border: “none”, borderRadius: 9, fontFamily: “‘Syne’,sans-serif”, fontWeight: 700, fontSize: 11, cursor: “pointer”, letterSpacing: 1 }}>Recommencer</button>
+<button onClick={() => setActiveQuiz(null)} style={{ padding: “11px 22px”, background: “transparent”, color: C.mist, border: `1px solid ${C.line2}`, borderRadius: 9, fontFamily: “‘Syne’,sans-serif”, fontWeight: 700, fontSize: 11, cursor: “pointer”, letterSpacing: 1 }}>Tous les quiz</button>
+</div>
+</Card>
+</div>
+);
+}
+
+return (
+<div style={{ maxWidth: 660, margin: “0 auto” }}>
+<div style={{ display: “flex”, justifyContent: “space-between”, marginBottom: 20 }}>
+<div style={{ fontFamily: “‘Syne’,sans-serif”, fontWeight: 600, color: C.white }}>{qData.title}</div>
+<div style={{ fontSize: 11, color: qData.color }}>{current + 1}/{qData.questions.length}</div>
+</div>
+<div style={{ height: 4, background: C.line, borderRadius: 2, marginBottom: 28, overflow: “hidden” }}>
+<div style={{ height: “100%”, background: qData.color, width: `${((current + 1) / qData.questions.length) * 100}%`, transition: “width 0.4s”, borderRadius: 2 }} />
+</div>
+<Card style={{ padding: 34, marginBottom: 16 }}>
+<div style={{ fontFamily: “‘Syne’,sans-serif”, fontWeight: 700, fontSize: 19, color: C.white, lineHeight: 1.5, marginBottom: 26 }}>{q.q}</div>
+<div style={{ display: “flex”, flexDirection: “column”, gap: 10 }}>
+{q.options.map((opt, i) => {
+let bg = “rgba(255,255,255,0.03)”, border = C.line, col = C.fog;
+if (selected !== null) {
+if (i === q.answer) { bg = `${C.em}12`; border = C.em; col = C.em; }
+else if (i === selected && i !== q.answer) { bg = `${C.cr}12`; border = C.cr; col = C.cr; }
+}
+return (
+<div key={i} onClick={() => answer(i)}
+style={{ padding: “13px 18px”, background: bg, border: `1px solid ${border}`, borderRadius: 10, cursor: selected !== null ? “default” : “pointer”, color: col, fontSize: 13, lineHeight: 1.5, transition: “all 0.2s”, display: “flex”, alignItems: “center”, gap: 12 }}>
+<span style={{ width: 24, height: 24, borderRadius: “50%”, background: `${border}20`, border: `1px solid ${border}`, display: “flex”, alignItems: “center”, justifyContent: “center”, fontSize: 9, fontFamily: “‘DM Mono’,monospace”, flexShrink: 0, color: col }}>
+{selected !== null && i === q.answer ? “✓” : selected !== null && i === selected && i !== q.answer ? “✕” : String.fromCharCode(65 + i)}
+</span>
+{opt}
+</div>
+);
+})}
+</div>
+</Card>
+{selected !== null && (
+<Card style={{ padding: 22, background: `${C.em}06`, border: `1px solid ${C.em}25` }}>
+<div style={{ fontSize: 9, color: C.em, letterSpacing: 2, textTransform: “uppercase”, marginBottom: 8 }}>💡 Explication détaillée</div>
+<div style={{ fontSize: 12, color: C.fog, lineHeight: 1.8 }}>{q.explanation}</div>
+</Card>
+)}
+</div>
+);
+}
+
+// ── SIMULATOR
+function Simulator() {
+const scenarios = [
+{ id: 1, pair: “EUR/USD”, tf: “H1”, bias: “HAUSSIER”, context: “Daily haussier (HH+HL). H4 vient de casser un structure haute. Le prix s’approche d’un Order Block haussier identifié en H4 entre 1.0820 et 1.0835. Le London Killzone vient de s’ouvrir.”, entry: 1.0825, sl: 1.0805, tp: 1.0865, correct: “S1 — Order Block Retest”, hint: “Le prix reteste un OB haussier dans la direction du Daily. Cherche une confirmation bullish.” },
+{ id: 2, pair: “EUR/USD”, tf: “H1”, bias: “BAISSIER”, context: “Daily clairement baissier (LL+LH). Il y a des Equal Highs visibles à 1.0950 avec beaucoup de stops potentiels. Le prix monte vers ces highs en contre-tendance.”, entry: 1.0955, sl: 1.0975, tp: 1.0895, correct: “S2 — Liquidity Sweep”, hint: “Les Equal Highs sont une zone de liquidité. Le marché va les chasser pour revendre.” },
+{ id: 3, pair: “GBP/USD”, tf: “H1”, bias: “HAUSSIER”, context: “Daily haussier. Le prix vient de faire un BOS haussier fort en H1, laissant un Fair Value Gap entre 1.2680 et 1.2695. Le prix redescend en pullback propre vers ce FVG.”, entry: 1.2685, sl: 1.2665, tp: 1.2730, correct: “S3 — FVG Fill”, hint: “Le FVG non comblé est une zone magnétique pour le prix. Attends la réaction dans le gap.” },
+];
+const setups = [“S1 — Order Block Retest”, “S2 — Liquidity Sweep”, “S3 — FVG Fill”, “S4 — BOS + Mitigation”];
+const [sc, setSc] = useState(null);
+const [choice, setChoice] = useState(null);
+const [result, setResult] = useState(null);
+
+const submit = (s) => {
+setChoice(s);
+const correct = s === sc.correct;
+const rr = Math.abs(sc.tp - sc.entry) / Math.abs(sc.entry - sc.sl);
+setResult({ correct, rr: rr.toFixed(2), slPips: Math.abs((sc.entry - sc.sl) * 10000).toFixed(0), tpPips: Math.abs((sc.tp - sc.entry) * 10000).toFixed(0) });
+};
+
+if (!sc) {
+return (
+<div>
+<SectionTitle num="06" title="Simulateur de trades" desc="Scénarios réels de marché. Identifie le bon setup, analyse le R:R — sans risquer de capital." />
+{scenarios.map(s => (
+<Card key={s.id} style={{ marginBottom: 14, cursor: “pointer”, overflow: “hidden” }} onClick={() => { setSc(s); setChoice(null); setResult(null); }}>
+<div style={{ display: “flex”, gap: 18, padding: “22px 26px”, alignItems: “center” }}>
+<div style={{ width: 42, height: 42, borderRadius: 10, background: `${C.em}12`, border: `1px solid ${C.em}30`, display: “flex”, alignItems: “center”, justifyContent: “center”, fontFamily: “‘Syne’,sans-serif”, fontWeight: 800, fontSize: 14, color: C.em, flexShrink: 0 }}>#{s.id}</div>
+<div style={{ flex: 1 }}>
+<div style={{ fontFamily: “‘Syne’,sans-serif”, fontWeight: 600, fontSize: 15, color: C.white, marginBottom: 5 }}>{s.pair} · {s.tf} · Biais {s.bias}</div>
+<div style={{ fontSize: 12, color: C.mist, lineHeight: 1.6 }}>{s.context.substring(0, 120)}…</div>
+</div>
+<div style={{ fontSize: 20, color: C.em }}>→</div>
+</div>
+</Card>
+))}
+</div>
+);
+}
+
+const rr = Math.abs(sc.tp - sc.entry) / Math.abs(sc.entry - sc.sl);
+
+return (
+<div>
+<button onClick={() => setSc(null)} style={{ background: “none”, border: `1px solid ${C.line2}`, color: C.mist, padding: “7px 16px”, borderRadius: 8, cursor: “pointer”, fontFamily: “‘DM Mono’,monospace”, fontSize: 11, marginBottom: 22, letterSpacing: 1 }}>← Retour</button>
+<div style={{ display: “grid”, gridTemplateColumns: “1fr 340px”, gap: 22 }}>
+<div>
+<Card style={{ padding: 32, marginBottom: 18 }}>
+<div style={{ display: “flex”, gap: 10, marginBottom: 18, flexWrap: “wrap” }}>
+<Tag color={C.sky}>{sc.pair}</Tag><Tag color={C.gold}>{sc.tf}</Tag>
+<Tag color={sc.bias === “HAUSSIER” ? C.em : C.cr}>Biais {sc.bias}</Tag>
+</div>
+<div style={{ fontFamily: “‘Syne’,sans-serif”, fontWeight: 700, fontSize: 17, color: C.white, marginBottom: 14 }}>Contexte de marché</div>
+<div style={{ fontSize: 13, color: C.fog, lineHeight: 1.9, marginBottom: 24 }}>{sc.context}</div>
+<div style={{ display: “grid”, gridTemplateColumns: “repeat(3,1fr)”, gap: 12, marginBottom: 24 }}>
+{[{ l: “Entrée”, v: sc.entry.toFixed(4), c: C.gold }, { l: “Stop-Loss”, v: sc.sl.toFixed(4), c: C.cr }, { l: “Take-Profit”, v: sc.tp.toFixed(4), c: C.em }].map((p, i) => (
+<div key={i} style={{ background: C.ink3, borderRadius: 10, padding: “14px 16px”, border: `1px solid ${p.c}25` }}>
+<div style={{ fontSize: 9, color: C.mist, letterSpacing: 1.5, textTransform: “uppercase”, marginBottom: 5 }}>{p.l}</div>
+<div style={{ fontFamily: “‘DM Mono’,monospace”, fontSize: 15, color: p.c, fontWeight: 500 }}>{p.v}</div>
+</div>
+))}
+</div>
+{!choice ? (
+<>
+<div style={{ fontFamily: “‘Syne’,sans-serif”, fontWeight: 600, fontSize: 14, color: C.white, marginBottom: 12 }}>Quel setup identifies-tu ?</div>
+<div style={{ display: “flex”, flexDirection: “column”, gap: 10 }}>
+{setups.map(s => (
+<button key={s} onClick={() => submit(s)}
+style={{ padding: “13px 18px”, background: “rgba(255,255,255,0.03)”, border: `1px solid ${C.line}`, borderRadius: 10, color: C.fog, fontFamily: “‘Syne’,sans-serif”, fontWeight: 500, fontSize: 13, cursor: “pointer”, textAlign: “left”, transition: “all 0.2s” }}>{s}</button>
+))}
+</div>
+</>
+) : result && (
+<div style={{ background: result.correct ? `${C.em}08` : `${C.cr}08`, border: `1px solid ${result.correct ? C.em : C.cr}30`, borderRadius: 12, padding: 24 }}>
+<div style={{ fontFamily: “‘Syne’,sans-serif”, fontWeight: 700, fontSize: 19, color: result.correct ? C.em : C.cr, marginBottom: 10 }}>{result.correct ? “✅ Excellent !” : “❌ Pas tout à fait”}</div>
+<div style={{ fontSize: 13, color: C.fog, marginBottom: 16 }}>Le setup correct : <strong style={{ color: C.white }}>{sc.correct}</strong></div>
+<div style={{ display: “grid”, gridTemplateColumns: “repeat(3,1fr)”, gap: 10 }}>
+{[{ l: “SL (pips)”, v: result.slPips }, { l: “TP (pips)”, v: result.tpPips }, { l: “R:R”, v: `1:${result.rr}` }].map((m, i) => (
+<div key={i} style={{ background: “rgba(255,255,255,0.04)”, borderRadius: 8, padding: “11px 14px” }}>
+<div style={{ fontSize: 9, color: C.mist, letterSpacing: 1.5, textTransform: “uppercase”, marginBottom: 4 }}>{m.l}</div>
+<div style={{ fontFamily: “‘Syne’,sans-serif”, fontWeight: 700, fontSize: 17, color: C.white }}>{m.v}</div>
+</div>
+))}
+</div>
+<button onClick={() => { setChoice(null); setResult(null); }} style={{ marginTop: 14, padding: “9px 20px”, background: C.gold, color: C.ink, border: “none”, borderRadius: 8, fontFamily: “‘Syne’,sans-serif”, fontWeight: 700, fontSize: 11, cursor: “pointer”, letterSpacing: 1 }}>Réessayer</button>
+</div>
+)}
+</Card>
+</div>
+{/* RR Visual sidebar */}
+<div>
+<Card style={{ padding: 24, marginBottom: 16 }}>
+<div style={{ fontSize: 9, color: C.sky, letterSpacing: 2, textTransform: “uppercase”, marginBottom: 12 }}>Visualisation R:R</div>
+<RRVisual rr={parseFloat(rr.toFixed(1))} />
+</Card>
+<Card style={{ padding: 24 }}>
+<div style={{ fontSize: 9, color: C.gold, letterSpacing: 2, textTransform: “uppercase”, marginBottom: 12 }}>💡 Indice</div>
+<div style={{ fontSize: 12, color: C.fog, lineHeight: 1.8 }}>{sc.hint}</div>
+</Card>
+</div>
+</div>
+</div>
+);
+}
+
+// ── CALCULATOR
+function Calculator() {
+const [bal, setBal] = useState(1000);
+const [riskPct, setRiskPct] = useState(1);
+const [slPips, setSlPips] = useState(20);
+const [entry, setEntry] = useState(1.0850);
+const [sl, setSl] = useState(1.0830);
+const [tp, setTp] = useState(1.0890);
+
+const riskAmt = bal * (riskPct / 100);
+const micro = slPips > 0 ? riskAmt / (slPips * 0.1) : 0;
+const microR = Math.floor(micro);
+const realRisk = (microR * slPips * 0.1).toFixed(2);
+const rrVal = entry && sl && tp ? Math.abs(tp - entry) / Math.abs(entry - sl) : 0;
+const slPipsCalc = entry && sl ? Math.abs((entry - sl) * 10000) : 0;
+const tpPipsCalc = entry && tp ? Math.abs((tp - entry) * 10000) : 0;
+
+const Inp = ({ label, value, onChange, step = 1 }) => (
+<div style={{ marginBottom: 14 }}>
+<label style={{ display: “block”, fontSize: 9, color: C.mist, letterSpacing: “2px”, textTransform: “uppercase”, marginBottom: 7 }}>{label}</label>
+<input type=“number” value={value} onChange={e => onChange(parseFloat(e.target.value) || 0)} step={step}
+style={{ width: “100%”, background: C.ink3, border: `1px solid ${C.line}`, borderRadius: 9, padding: “10px 13px”, color: C.white, fontFamily: “‘DM Mono’,monospace”, fontSize: 13, outline: “none” }} />
+</div>
+);
+
+return (
+<div>
+<SectionTitle num="07" title="Calculateurs" desc="Position sizing précis et R:R en temps réel avec visualisation graphique." />
+<div style={{ display: “grid”, gridTemplateColumns: “1fr 1fr”, gap: 24 }}>
+<Card style={{ padding: 28 }}>
+<div style={{ fontFamily: “‘Syne’,sans-serif”, fontWeight: 700, fontSize: 16, color: C.white, marginBottom: 18 }}>🧮 Position Sizing</div>
+<Inp label="Balance (€)" value={bal} onChange={setBal} step={100} />
+<Inp label="Risque (%)" value={riskPct} onChange={setRiskPct} step={0.5} />
+<Inp label="Stop-Loss (pips)" value={slPips} onChange={setSlPips} />
+<div style={{ background: C.ink3, borderRadius: 12, padding: 20, marginTop: 8 }}>
+<div style={{ fontSize: 9, color: C.gold, letterSpacing: 2, textTransform: “uppercase”, marginBottom: 14 }}>Résultat</div>
+<div style={{ display: “grid”, gridTemplateColumns: “1fr 1fr”, gap: 10 }}>
+{[{ l: “Risque max”, v: riskAmt.toFixed(2) + “€”, c: C.gold }, { l: “Micro-lots”, v: micro.toFixed(2), c: C.mist }, { l: “Arrondi ↓”, v: microR, c: C.em }, { l: “Risque réel”, v: realRisk + “€”, c: C.cr }].map((r, i) => (
+<div key={i} style={{ background: “rgba(255,255,255,0.03)”, borderRadius: 8, padding: “12px 14px” }}>
+<div style={{ fontSize: 9, color: C.mist, letterSpacing: 1.5, textTransform: “uppercase”, marginBottom: 5 }}>{r.l}</div>
+<div style={{ fontFamily: “‘Syne’,sans-serif”, fontWeight: 800, fontSize: 22, color: r.c, letterSpacing: -0.5 }}>{r.v}</div>
+</div>
+))}
+</div>
+<div style={{ marginTop: 12, fontSize: 11, color: `${C.gold}cc`, lineHeight: 1.7, background: `${C.gold}08`, borderRadius: 8, padding: “10px 12px”, border: `1px solid ${C.gold}18` }}>
+({bal}€ × {riskPct}%) ÷ ({slPips} × 0.10) = {micro.toFixed(2)} → <strong>{microR} micro-lots</strong>
+</div>
+</div>
+</Card>
+
+```
+    <Card style={{ padding: 28 }}>
+      <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: 16, color: C.white, marginBottom: 18 }}>📐 Risk-Reward Ratio</div>
+      <Inp label="Prix d'entrée" value={entry} onChange={setEntry} step={0.0001} />
+      <Inp label="Stop-Loss" value={sl} onChange={setSl} step={0.0001} />
+      <Inp label="Take-Profit" value={tp} onChange={setTp} step={0.0001} />
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 200px", gap: 16, marginTop: 8 }}>
+        <div>
+          <div style={{ background: C.ink3, borderRadius: 12, padding: 20 }}>
+            <div style={{ fontSize: 9, color: C.purple, letterSpacing: 2, textTransform: "uppercase", marginBottom: 14 }}>Résultat</div>
+            {[{ l: "SL (pips)", v: slPipsCalc.toFixed(0), c: C.cr }, { l: "TP (pips)", v: tpPipsCalc.toFixed(0), c: C.em }].map((r, i) => (
+              <div key={i} style={{ background: "rgba(255,255,255,0.03)", borderRadius: 8, padding: "11px 14px", marginBottom: 10 }}>
+                <div style={{ fontSize: 9, color: C.mist, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 4 }}>{r.l}</div>
+                <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 20, color: r.c }}>{r.v}</div>
+              </div>
+            ))}
+            <div style={{ background: rrVal >= 2 ? `${C.em}12` : rrVal >= 1.5 ? `${C.gold}12` : `${C.cr}12`, border: `1px solid ${rrVal >= 2 ? C.em : rrVal >= 1.5 ? C.gold : C.cr}35`, borderRadius: 10, padding: 16, textAlign: "center" }}>
+              <div style={{ fontSize: 9, color: C.mist, letterSpacing: 2, textTransform: "uppercase", marginBottom: 6 }}>R:R Ratio</div>
+              <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: 36, color: rrVal >= 2 ? C.em : rrVal >= 1.5 ? C.gold : C.cr, letterSpacing: -2 }}>1:{rrVal.toFixed(2)}</div>
+              <div style={{ fontSize: 10, marginTop: 4, color: C.mist }}>{rrVal >= 2 ? "✅ Setup valide" : rrVal >= 1.5 ? "⚠️ Limite" : "❌ Invalide"}</div>
+            </div>
+          </div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <RRVisual rr={Math.max(0.5, parseFloat(rrVal.toFixed(1)))} />
+        </div>
+      </div>
+    </Card>
+  </div>
+</div>
+```
+
+);
+}
+
+// ── JOURNAL
+function Journal() {
+const [trades, setTrades] = useState(() => JSON.parse(localStorage.getItem(“avre_v5”) || “[]”));
+const [form, setForm] = useState({ date: new Date().toISOString().split(“T”)[0], pair: “EUR/USD”, direction: “BUY”, session: “London Open”, setup: “S1 — Order Block Retest”, entry: “”, sl: “”, tp: “”, pnl: “”, emotion: “😌 Calme”, outcome: “win”, plan: “yes”, notes: “” });
+
+const save = (t) => { const u = […trades, t]; setTrades(u); localStorage.setItem(“avre_v5”, JSON.stringify(u)); };
+const del = (id) => { const u = trades.filter(t => t.id !== id); setTrades(u); localStorage.setItem(“avre_v5”, JSON.stringify(u)); };
+const submit = () => {
+save({ …form, id: Date.now(), pnl: parseFloat(form.pnl) || 0, rr: form.entry && form.sl && form.tp ? (Math.abs(form.tp - form.entry) / Math.abs(form.entry - form.sl)).toFixed(2) : “—” });
+setForm(f => ({ …f, entry: “”, sl: “”, tp: “”, pnl: “”, notes: “” }));
+};
+
+const wins = trades.filter(t => t.outcome === “win”).length;
+const losses = trades.filter(t => t.outcome === “loss”).length;
+const total = trades.length;
+const pnl = trades.reduce((s, t) => s + (t.pnl || 0), 0);
+
+const Sel = ({ label, k, opts }) => (
+<div style={{ marginBottom: 12 }}>
+<label style={{ display: “block”, fontSize: 9, color: C.mist, letterSpacing: “2px”, textTransform: “uppercase”, marginBottom: 6 }}>{label}</label>
+<select value={form[k]} onChange={e => setForm(f => ({ …f, [k]: e.target.value }))}
+style={{ width: “100%”, background: C.ink3, border: `1px solid ${C.line}`, borderRadius: 8, padding: “9px 12px”, color: C.white, fontFamily: “‘DM Mono’,monospace”, fontSize: 12, outline: “none”, appearance: “none” }}>
+{opts.map(o => <option key={o}>{o}</option>)}
+</select>
+</div>
+);
+const Inp2 = ({ label, k, type = “text”, placeholder = “” }) => (
+<div style={{ marginBottom: 12 }}>
+<label style={{ display: “block”, fontSize: 9, color: C.mist, letterSpacing: “2px”, textTransform: “uppercase”, marginBottom: 6 }}>{label}</label>
+<input type={type} value={form[k]} placeholder={placeholder} onChange={e => setForm(f => ({ …f, [k]: e.target.value }))}
+style={{ width: “100%”, background: C.ink3, border: `1px solid ${C.line}`, borderRadius: 8, padding: “9px 12px”, color: C.white, fontFamily: “‘DM Mono’,monospace”, fontSize: 12, outline: “none” }} />
+</div>
+);
+
+const pnlData = trades.slice(-20).map(t => t.pnl || 0).reduce((acc, v, i) => […acc, (acc[i - 1] || 0) + v], []);
+
+return (
+<div>
+<div style={{ display: “grid”, gridTemplateColumns: “repeat(5,1fr)”, gap: 12, marginBottom: 22 }}>
+{[{ l: “Gagnants”, v: wins, c: C.em }, { l: “Perdants”, v: losses, c: C.cr }, { l: “Win Rate”, v: total ? Math.round(wins / total * 100) + “%” : “—”, c: C.gold }, { l: “P&L”, v: (pnl >= 0 ? “+” : “”) + pnl.toFixed(2) + “€”, c: pnl >= 0 ? C.em : C.cr },
+{ l: “Equity curve”, v: null, c: pnl >= 0 ? C.em : C.cr, chart: pnlData }].map((s, i) => (
+<Card key={i} style={{ padding: “16px 18px” }}>
+<div style={{ fontSize: 9, color: C.mist, letterSpacing: 2, textTransform: “uppercase”, marginBottom: 8 }}>{s.l}</div>
+{s.chart ? (
+pnlData.length > 1 ? <MiniChart data={pnlData} width={140} height={36} color={s.c} /> :
+<div style={{ fontFamily: “‘Syne’,sans-serif”, fontWeight: 800, fontSize: 22, color: C.mist }}>—</div>
+) : (
+<div style={{ fontFamily: “‘Syne’,sans-serif”, fontWeight: 800, fontSize: 24, color: s.c, letterSpacing: -1 }}>{s.v}</div>
+)}
+</Card>
+))}
+</div>
+<div style={{ display: “grid”, gridTemplateColumns: “370px 1fr”, gap: 20, alignItems: “flex-start” }}>
+<Card style={{ padding: 24, position: “sticky”, top: 78 }}>
+<div style={{ fontFamily: “‘Syne’,sans-serif”, fontWeight: 700, fontSize: 15, color: C.white, marginBottom: 18 }}>Nouveau trade</div>
+<div style={{ display: “grid”, gridTemplateColumns: “1fr 1fr”, gap: 10 }}>
+<Inp2 label="Date" k="date" type="date" /><Sel label=“Paire” k=“pair” opts={[“EUR/USD”, “GBP/USD”, “USD/JPY”, “XAU/USD”, “GBP/JPY”, “AUD/USD”]} />
+<Sel label=“Direction” k=“direction” opts={[“BUY”, “SELL”]} /><Sel label=“Session” k=“session” opts={[“London Open”, “NY Open”, “Overlap”, “Asie”]} />
+</div>
+<div style={{ display: “grid”, gridTemplateColumns: “1fr 1fr 1fr”, gap: 8, marginBottom: 4 }}>
+<Inp2 label="Entrée" k="entry" type="number" placeholder="1.0850" /><Inp2 label="SL" k="sl" type="number" placeholder="1.0830" /><Inp2 label="TP" k="tp" type="number" placeholder="1.0890" />
+</div>
+<Sel label=“Setup” k=“setup” opts={[“S1 — Order Block Retest”, “S2 — Liquidity Sweep”, “S3 — FVG Fill”, “S4 — BOS + Mitigation”, “Autre”]} />
+<div style={{ display: “grid”, gridTemplateColumns: “1fr 1fr”, gap: 10 }}>
+<Inp2 label="P&L (€)" k="pnl" type="number" placeholder="+20" /><Sel label=“Issue” k=“outcome” opts={[“win”, “loss”, “be”, “partial”]} />
+<Sel label=“Émotion” k=“emotion” opts={[“😌 Calme”, “🤩 Enthousiaste”, “😰 Anxieux”, “😤 Frustré”, “💪 Discipliné”]} /><Sel label=“Plan ?” k=“plan” opts={[“yes”, “partial”, “no”]} />
+</div>
+<div style={{ marginBottom: 16 }}>
+<label style={{ display: “block”, fontSize: 9, color: C.mist, letterSpacing: “2px”, textTransform: “uppercase”, marginBottom: 6 }}>Notes</label>
+<textarea value={form.notes} onChange={e => setForm(f => ({ …f, notes: e.target.value }))} placeholder=“Analyse, leçons…”
+style={{ width: “100%”, background: C.ink3, border: `1px solid ${C.line}`, borderRadius: 8, padding: “9px 12px”, color: C.white, fontFamily: “‘DM Mono’,monospace”, fontSize: 12, outline: “none”, resize: “vertical”, minHeight: 60 }} />
+</div>
+<button onClick={submit} style={{ width: “100%”, padding: 13, background: C.gold, color: C.ink, border: “none”, borderRadius: 10, fontFamily: “‘Syne’,sans-serif”, fontWeight: 700, fontSize: 12, cursor: “pointer”, letterSpacing: 1, textTransform: “uppercase” }}>+ Enregistrer</button>
+</Card>
+<Card style={{ overflow: “hidden” }}>
+<div style={{ padding: “16px 22px”, borderBottom: `1px solid ${C.line}`, display: “flex”, justifyContent: “space-between” }}>
+<div style={{ fontFamily: “‘Syne’,sans-serif”, fontWeight: 600, fontSize: 14, color: C.white }}>Historique</div>
+<div style={{ fontSize: 10, color: C.mist, letterSpacing: 1 }}>{total} trade(s)</div>
+</div>
+{!trades.length ? (
+<div style={{ padding: “52px 24px”, textAlign: “center” }}>
+<div style={{ fontSize: 30, marginBottom: 12, opacity: 0.3 }}>📓</div>
+<div style={{ fontSize: 11, color: C.mist, letterSpacing: 1 }}>Aucun trade — commence à journaliser</div>
+</div>
+) : (
+<div style={{ overflowX: “auto” }}>
+<table style={{ width: “100%”, borderCollapse: “collapse” }}>
+<thead><tr>{[“Date”, “Paire”, “Dir.”, “Setup”, “Émotion”, “Plan”, “R:R”, “P&L”, “Issue”, “”].map(h => <th key={h} style={{ fontSize: 9, letterSpacing: “1.5px”, textTransform: “uppercase”, color: C.mist, padding: “11px 14px”, textAlign: “left”, borderBottom: `1px solid ${C.line}`, fontWeight: 400 }}>{h}</th>)}</tr></thead>
+<tbody>{[…trades].reverse().map(t => (
+<tr key={t.id} style={{ borderBottom: `1px solid rgba(255,255,255,0.04)` }}>
+<td style={{ padding: “11px 14px”, fontSize: 11, color: C.mist }}>{t.date}</td>
+<td style={{ padding: “11px 14px”, fontFamily: “‘Syne’,sans-serif”, fontWeight: 600, fontSize: 13, color: C.white }}>{t.pair}</td>
+<td style={{ padding: “11px 14px” }}><span style={{ fontSize: 9, padding: “3px 7px”, borderRadius: 6, letterSpacing: 1, fontWeight: 500, background: t.direction === “BUY” ? `${C.em}15` : `${C.cr}15`, color: t.direction === “BUY” ? C.em : C.cr, border: `1px solid ${t.direction === "BUY" ? C.em : C.cr}35` }}>{t.direction}</span></td>
+<td style={{ padding: “11px 14px”, fontSize: 10, color: C.mist, maxWidth: 100, overflow: “hidden”, textOverflow: “ellipsis”, whiteSpace: “nowrap” }}>{t.setup?.split(”—”)[0]}</td>
+<td style={{ padding: “11px 14px”, fontSize: 14 }}>{t.emotion?.split(” “)[0]}</td>
+<td style={{ padding: “11px 14px”, fontSize: 13 }}>{t.plan === “yes” ? “✅” : t.plan === “partial” ? “⚠️” : “❌”}</td>
+<td style={{ padding: “11px 14px”, fontFamily: “‘DM Mono’,monospace”, fontSize: 12, color: C.sky }}>{t.rr !== “—” ? “1:” + t.rr : “—”}</td>
+<td style={{ padding: “11px 14px” }}><span style={{ fontFamily: “‘Syne’,sans-serif”, fontWeight: 700, fontSize: 13, color: t.pnl > 0 ? C.em : t.pnl < 0 ? C.cr : C.mist }}>{t.pnl > 0 ? “+” : “”}{t.pnl}€</span></td>
+<td style={{ padding: “11px 14px”, fontSize: 13 }}>{t.outcome === “win” ? “✅” : t.outcome === “loss” ? “❌” : t.outcome === “partial” ? “🔶” : “➡️”}</td>
+<td style={{ padding: “11px 14px” }}><button onClick={() => del(t.id)} style={{ background: “none”, border: “none”, color: `${C.white}25`, cursor: “pointer”, fontSize: 13 }}>✕</button></td>
+</tr>
+))}</tbody>
+</table>
+</div>
+)}
+</Card>
+</div>
+</div>
+);
+}
+
+// ── CHECKLIST
+function Checklist() {
+const [checked, setChecked] = useState({});
+const sections = [
+{ t: “Analyse macro”, icon: “📊”, items: [“Daily analysé — biais directionnel identifié”, “Structure H4 confirmée — zones clés marquées”, “OB actifs, FVG non comblés, liquidité repérés”, “Setup aligné avec la tendance Daily”] },
+{ t: “Risk Management”, icon: “⚖️”, items: [“Stop-Loss défini AVANT l’ouverture”, “Risque ≤ 1% de la balance”, “Risk-Reward ≥ 1:2 (calculé précisément)”, “Taille de position calculée avec la formule”] },
+{ t: “Contexte & News”, icon: “📅”, items: [“Forex Factory vérifié pour aujourd’hui”, “Pas de news high impact dans les 30min”, “Killzone active (London 7h-9h ou NY 13h-15h)”, “Spread normal — pas de pic anormal”] },
+{ t: “État mental”, icon: “🧠”, items: [“Calme, reposé, concentré”, “Ne trade PAS pour récupérer des pertes”, “Pas déjà 2 pertes consécutives aujourd’hui”, “Trade un setup — pas une impulsion FOMO”] },
+];
+const total = sections.reduce((s, sec) => s + sec.items.length, 0);
+const count = Object.values(checked).filter(Boolean).length;
+const pct = Math.round(count / total * 100);
+const toggle = (k) => setChecked(c => ({ …c, [k]: !c[k] }));
+
+return (
+<div>
+<SectionTitle num="09" title="Pre-trade Checklist" desc="16 points à cocher avant chaque trade. Si tu ne peux pas tout cocher — tu ne trades pas." />
+<div style={{ display: “grid”, gridTemplateColumns: “1fr 1fr 1fr”, gap: 16, marginBottom: 22 }}>
+{[{ l: “Points cochés”, v: `${count}/${total}`, c: C.gold }, { l: “Score”, v: pct + “%”, c: pct === 100 ? C.em : pct >= 75 ? C.gold : C.cr }, { l: “Verdict”, v: pct === 100 ? “✅ GO TRADE” : pct >= 75 ? “⚠️ ATTENDS” : “⛔ NE TRADE PAS”, c: pct === 100 ? C.em : pct >= 75 ? C.gold : C.cr }].map((s, i) => (
+<Card key={i} style={{ padding: 22, textAlign: “center” }}>
+<div style={{ fontFamily: “‘Syne’,sans-serif”, fontWeight: 800, fontSize: pct === 100 && i === 2 ? 20 : 34, color: s.c, letterSpacing: i === 2 ? 0 : -1, marginBottom: 4 }}>{s.v}</div>
+<div style={{ fontSize: 9, color: C.mist, letterSpacing: 2, textTransform: “uppercase” }}>{s.l}</div>
+</Card>
+))}
+</div>
+{/* Progress bar */}
+<div style={{ height: 6, background: C.line, borderRadius: 3, marginBottom: 22, overflow: “hidden” }}>
+<div style={{ height: “100%”, background: pct === 100 ? C.em : pct >= 75 ? C.gold : C.cr, width: `${pct}%`, transition: “width 0.3s, background 0.3s”, borderRadius: 3 }} />
+</div>
+<div style={{ display: “grid”, gridTemplateColumns: “1fr 1fr”, gap: 16, marginBottom: 18 }}>
+{sections.map((sec, si) => {
+const secCount = sec.items.filter((_, ii) => checked[`${si}-${ii}`]).length;
+return (
+<Card key={si} style={{ overflow: “hidden” }}>
+<div style={{ padding: “14px 18px”, borderBottom: `1px solid ${C.line}`, display: “flex”, alignItems: “center”, gap: 10 }}>
+<span style={{ fontSize: 15 }}>{sec.icon}</span>
+<span style={{ fontFamily: “‘Syne’,sans-serif”, fontWeight: 600, fontSize: 13, color: C.white, flex: 1 }}>{sec.t}</span>
+<span style={{ fontSize: 9, color: C.mist, letterSpacing: 1 }}>{secCount}/{sec.items.length}</span>
+</div>
+{sec.items.map((item, ii) => {
+const k = `${si}-${ii}`;
+return (
+<div key={ii} onClick={() => toggle(k)}
+style={{ display: “flex”, alignItems: “center”, gap: 12, padding: “12px 18px”, borderBottom: `1px solid rgba(255,255,255,0.04)`, cursor: “pointer” }}>
+<div style={{ width: 20, height: 20, borderRadius: 6, border: `1.5px solid ${checked[k] ? C.gold : C.line2}`, background: checked[k] ? C.gold : “transparent”, display: “flex”, alignItems: “center”, justifyContent: “center”, flexShrink: 0, transition: “all 0.2s”, fontSize: 11, color: C.ink }}>{checked[k] ? “✓” : “”}</div>
+<span style={{ fontSize: 12, color: checked[k] ? C.mist : C.fog, textDecoration: checked[k] ? “line-through” : “none”, lineHeight: 1.5 }}>{item}</span>
+</div>
+);
+})}
+</Card>
+);
+})}
+</div>
+<div style={{ textAlign: “center” }}>
+<button onClick={() => setChecked({})} style={{ padding: “9px 22px”, background: “transparent”, border: `1px solid ${C.line2}`, borderRadius: 8, color: C.mist, fontFamily: “‘DM Mono’,monospace”, fontSize: 11, cursor: “pointer”, letterSpacing: 1 }}>↺ Réinitialiser</button>
+</div>
+</div>
+);
+}
+
+// ── ROADMAP
+function Roadmap() {
+const [done, setDone] = useState(() => JSON.parse(localStorage.getItem(“avre_rm_v5”) || “[]”));
+const toggle = (i) => {
+const u = done.includes(i) ? done.filter(d => d !== i) : […done, i];
+setDone(u); localStorage.setItem(“avre_rm_v5”, JSON.stringify(u));
+};
+const current = done.length > 0 ? Math.min(Math.max(…done) + 1, ROADMAP_DATA.length - 1) : 0;
+
+return (
+<div>
+<SectionTitle num="10" title="Roadmap — 5 ans vers le pro" desc="Ton plan de carrière en trading. Clique sur les cercles pour marquer ta progression." />
+<div style={{ display: “grid”, gridTemplateColumns: “1fr 300px”, gap: 26, alignItems: “flex-start” }}>
+<div>
+{ROADMAP_DATA.map((p, i) => {
+const isDone = done.includes(i), isCurrent = current === i && !isDone;
+return (
+<div key={i} style={{ display: “flex” }}>
+<div style={{ display: “flex”, flexDirection: “column”, alignItems: “center”, width: 50, flexShrink: 0 }}>
+<div onClick={() => toggle(i)} style={{ width: 16, height: 16, borderRadius: “50%”, background: isDone ? C.em : isCurrent ? C.gold : “#1E1E2A”, border: `2px solid ${isDone ? C.em : isCurrent ? C.gold : C.line2}`, marginTop: 17, cursor: “pointer”, flexShrink: 0, boxShadow: isCurrent ? `0 0 18px ${C.gold}80` : isDone ? `0 0 12px ${C.em}60` : “none”, transition: “all 0.3s” }} />
+{i < ROADMAP_DATA.length - 1 && <div style={{ width: 2, flex: 1, background: isDone ? `linear-gradient(to bottom,${C.em},${C.line})` : C.line, minHeight: 28 }} />}
+</div>
+<Card style={{ flex: 1, padding: “18px 22px”, marginBottom: 12, border: `1px solid ${isCurrent ? `${C.gold}30`: isDone ?`${C.em}18` : C.line}`, opacity: isDone ? 0.55 : 1 }}>
+<div style={{ fontSize: 9, color: isCurrent ? C.gold : C.em, letterSpacing: 2, textTransform: “uppercase”, marginBottom: 4 }}>{p.phase}</div>
+<div style={{ fontFamily: “‘Syne’,sans-serif”, fontWeight: 700, fontSize: 15, color: C.white, marginBottom: 7 }}>{p.title}</div>
+<div style={{ fontSize: 11, color: C.mist, lineHeight: 1.7, marginBottom: 10 }}>{p.desc}</div>
+<div style={{ display: “flex”, flexWrap: “wrap”, gap: 6 }}>
+{p.ms.map(m => <span key={m} style={{ fontSize: 9, padding: “3px 8px”, borderRadius: 6, background: “rgba(255,255,255,0.05)”, color: C.mist, border: `1px solid ${C.line}` }}>{m}</span>)}
+</div>
+<div style={{ display: “inline-flex”, alignItems: “center”, gap: 5, fontSize: 9, padding: “4px 10px”, borderRadius: 20, letterSpacing: 1, marginTop: 10, background: isDone ? `${C.em}12` : isCurrent ? `${C.gold}10` : C.line, color: isDone ? C.em : isCurrent ? C.gold : C.mist, border: `1px solid ${isDone ? C.em : isCurrent ? C.gold : C.line}30` }}>{isDone ? “✓ Complété” : isCurrent ? “◉ En cours” : “○ À venir”}</div>
+</Card>
+</div>
+);
+})}
+</div>
+{/* Sidebar */}
+<div style={{ position: “sticky”, top: 78 }}>
+{[{ t: “📚 Lectures par phase”, items: [[“Phase 1”, “Trading in the Zone — Mark Douglas”], [“Phase 2”, “Technical Analysis — John Murphy”], [“Phase 3”, “Reminiscences of a Stock Operator”], [“Phase 4-5”, “Market Wizards — Jack Schwager”]] },
+{ t: “🏛️ L’héritage”, items: [[””, “Ce que tu construis aujourd’hui est une compétence rare. La maîtrise des marchés financiers se transmet — pas l’argent, mais la connaissance qui génère l’argent.”]] }].map((card, ci) => (
+<Card key={ci} style={{ padding: 22, marginBottom: 14 }}>
+<div style={{ fontFamily: “‘Syne’,sans-serif”, fontWeight: 700, fontSize: 13, color: C.white, marginBottom: 14, paddingBottom: 10, borderBottom: `1px solid ${C.line}` }}>{card.t}</div>
+{card.items.map(([label, text], ii) => (
+<div key={ii} style={{ display: “flex”, gap: 10, padding: “8px 0”, borderBottom: `1px solid rgba(255,255,255,0.04)` }}>
+{label && <span style={{ fontSize: 9, color: C.gold, flexShrink: 0, paddingTop: 2 }}>{label}</span>}
+<span style={{ fontSize: 11, color: C.mist, lineHeight: 1.6 }}>{text}</span>
+</div>
+))}
+</Card>
+))}
+</div>
+</div>
+</div>
+);
+}
+
+// ════════════════════════════════════════════════════════════
+//  APP ROOT
+// ════════════════════════════════════════════════════════════
+
+export default function App() {
+const [page, setPage] = useState(“dashboard”);
+const [trades, setTrades] = useState(() => JSON.parse(localStorage.getItem(“avre_v5”) || “[]”));
+
+useEffect(() => {
+const sync = () => setTrades(JSON.parse(localStorage.getItem(“avre_v5”) || “[]”));
+const id = setInterval(sync, 1500);
+return () => clearInterval(id);
+}, []);
+
+const pages = {
+dashboard: <Dashboard trades={trades} />,
+guide: <Guide />,
+smc: <SMCPage />,
+sessions: <SessionsPage />,
+quiz: <Quiz />,
+simulator: <Simulator />,
+calculator: <Calculator />,
+journal: <Journal />,
+checklist: <Checklist />,
+roadmap: <Roadmap />,
+};
+
+return (
+<>
+<style>{`@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Mono:wght@300;400;500&family=Syne:wght@400;500;600;700;800&display=swap'); *{margin:0;padding:0;box-sizing:border-box;} body{background:#06060A;color:#F5F5FA;font-family:'DM Mono',monospace;} ::-webkit-scrollbar{width:4px;}::-webkit-scrollbar-track{background:transparent;}::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.12);border-radius:2px;} @keyframes blink{0%,100%{opacity:1;}50%{opacity:0.2;}} @keyframes drawLine{to{stroke-dashoffset:0;}} @keyframes fadeIn{to{opacity:1;}} button{cursor:pointer;}`}</style>
+<div style={{ display: “flex”, minHeight: “100vh”, background: “#06060A” }}>
+<Sidebar page={page} onNav={setPage} />
+<div style={{ marginLeft: 252, flex: 1, minHeight: “100vh” }}>
+<Topbar page={page} trades={trades} />
+<div style={{ padding: “30px 34px”, maxWidth: 1320 }}>
+{pages[page] || <Dashboard trades={trades} />}
+</div>
+</div>
+</div>
+</>
+);
+}
